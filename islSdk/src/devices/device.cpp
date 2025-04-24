@@ -134,7 +134,7 @@ Device::Device(const Device::Info& info) : IslHdlc(), m_info(info)
     m_reconnectCount = 0;
     m_resetting = false;
     m_searchTimeoutMs = 1000;
-    m_searchCount = 30;
+    m_searchCount = 63000;//30
     m_packetResendLimit = 2;
     m_deviceTimeOut = 0;
     m_deleteTimer = Time::getTimeMs() + deleteAfterTime;          // Delete this device if not connected within deleteAfterTime milliseconds
