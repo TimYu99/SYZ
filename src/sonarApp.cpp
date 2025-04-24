@@ -39,11 +39,14 @@ std::mutex uartMutex;
 //const int ROWS = 160; // 行数
 //const int COLS = 101;  // 列数
 
+cv::Mat frame11Display;
+cv::Mat frame22Display;
+
 ////180°扇形最边角角度定义
 const float START_ANGLE = 270; // 扇形开始边角
 const float END_ANGLE = 90;    // 扇形结束边角
 const float ANGLE_TOLERANCE = 0.5; // 容差范围 ±1度
-const int ROWS = 160; // 行数
+const int ROWS = 200; // 行数
 const int COLS = 201;  // 列数
 
 float shanxing[ROWS][COLS] = { 0 }; // 初始化为 0
@@ -228,16 +231,16 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
     reserved = 0;
     end1 = 0x0D;    // CR
     end2 = 0x0A;    // LF
-    
+
     Debug::log(Debug::Severity::Notice, name.c_str(), "created" NEW_LINE
-                                                      "d -> Set settings to defualt" NEW_LINE
-                                                      "s -> Save settings to file" NEW_LINE
-                                                      "r -> Start scaning" NEW_LINE
-                                                      "R -> Stop scaning" NEW_LINE
-                                                      "p -> Save palette" NEW_LINE
-                                                      "t -> Save sonar texture" NEW_LINE
-                                                      "i -> Save sonar image" NEW_LINE
-                                                      "c -> Check head is sync'ed" NEW_LINE);
+        "d -> Set settings to defualt" NEW_LINE
+        "s -> Save settings to file" NEW_LINE
+        "r -> Start scaning" NEW_LINE
+        "R -> Stop scaning" NEW_LINE
+        "p -> Save palette" NEW_LINE
+        "t -> Save sonar texture" NEW_LINE
+        "i -> Save sonar image" NEW_LINE
+        "c -> Check head is sync'ed" NEW_LINE);
     //自动运行
     std::thread([this]() {
         while (true) {
@@ -248,6 +251,10 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
             //std::this_thread::sleep_for(std::chrono::minutes(1)); // 等待4分钟
         }
         }).detach();
+        std::cout << "creat sonar app!";
+        std::thread consumerThread(&SonarApp::consumePingData, this);
+        consumerThread.detach();
+
 }
 //--------------------------------------------------------------------------------------------------
 SonarApp::~SonarApp(void)
@@ -280,7 +287,7 @@ void SonarApp::connectSignals(Device& device)
     sonar.onPwrAndTemp.connect(slotPwrAndTemp);             // Subscribing to this event causes data to be sent from the device at the rate defined by setSensorRates()
     sonar.onMotorSlip.connect(slotMotorSlip);
     sonar.onMotorMoveComplete.connect(slotMotorMoveComplete);
-    
+
     Sonar::SensorRates rates;
     rates.ahrs = 100;
     rates.gyro = 0;
@@ -474,53 +481,41 @@ void SonarApp::callbackMotorMoveComplete(Sonar& sonar, bool_t ok)
     Debug::log(Debug::Severity::Info, name.c_str(), "Motor move %s", ok ? "complete" : "busy");
 }
 //----------------------------------------------------------------------------------------------
-//--------------------------------------------------------------------------------------------------
-void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
+void SonarApp::consumePingData()
 {
-    //Debug::log(Debug::Severity::Info, name.c_str(), "Ping data");
-    if (isRecording)
-    {
-        static int pingDataCount = 0; // 静态变量用于保持计数器的值
-        //Debug::log(Debug::Severity::Info, name.c_str(), "Ping data");
-        Debug::log(Debug::Severity::Info, name.c_str(), "Ping data, Count: %d", ++pingDataCount); // 显示计数器的值
-    uint_t txPulseLengthMm = static_cast<uint_t>(iss360.settings.system.speedOfSound * iss360.settings.acoustic.txPulseWidthUs * 0.001 * 0.5);
+    // Sonar::Ping ping;
+CONSUMER_START:
+    std::unique_lock<std::mutex> lock(pingQueueMutex);
+    consumerCondition.wait(lock, [this] { return !pingQueue.empty(); });
+    std::cout << "Consumer thread comsume data!  Queue size = " << pingQueue.size() << std::endl; // 调试输出
+    Sonar::Ping ping = pingQueue.front(); // 获取队列前端的元素
+    pingQueue.pop(); // 移除队列前端的元素
+    lock.unlock(); // 解锁互斥量
+
+    // 处理 pingData
+    uint_t txPulseLengthMm = static_cast<uint_t>((*m_piss360).settings.system.speedOfSound * (*m_piss360).settings.acoustic.txPulseWidthUs * 0.001 * 0.5);
     txPulseLengthMm = Math::max<uint_t>(txPulseLengthMm, 150);
+    recordPingData(*m_piss360, ping, txPulseLengthMm);
 
-    sonarDataStore.add(ping, txPulseLengthMm);
-    recordPingData(iss360, ping, txPulseLengthMm);
-    m_pingCount++;
-
-    if (m_pingCount % (Sonar::maxAngle / iss360.settings.setup.stepSize) == 0)
-    {
-        m_pingCount = 0;
-        /*
-        m_texture.renderTexture(sonarDataStore, m_palette, false);
-        BmpFile::save("snrTex.bmp", reinterpret_cast<const uint32_t*>(&m_texture.buf[0]), 32, m_texture.width, m_texture.height);
-
-        m_circular.render(sonarDataStore, m_palette, true);
-        BmpFile::save("snrCi.bmp", reinterpret_cast<const uint32_t*>(&m_circular.buf[0]), 32, m_circular.width, m_circular.height);
-        */
-    }
     if (flag_shanxing == 1)
     {
         jishu_shanxing = jishu_shanxing + 1;
         if (jishu_shanxing == 1)
         {
-            memcpy(frame4, shanxing, sizeof(shanxing));
+            memcpy(frame1, shanxing, sizeof(shanxing));
+            cv::Mat frame11 = cv::Mat(ROWS, COLS, CV_32FC1, frame1).clone(); // 克隆保证数据独立
+            //cv::Mat frame11Display;
+            cv::normalize(frame11, frame11Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+            // 缩放比例
+            double scale1 = 2.0;
+            cv::Mat  frame11Resized;
+            cv::resize(frame11Display, frame11Resized, cv::Size(), scale1, scale1, cv::INTER_NEAREST);
+            saveImageWithTimestamp_beijing(frame11Display);
+
+            //memcpy(frame1, frame4, sizeof(frame1));
         }
         jishi_mubiao++;
-        //将矩阵数据转换为图像数据
-        //frame1 = frame2;
-        //std::swap(currentFrame, nextFrame);
-        //if (flag_yundong == 0 && flag_jingzhi == 1)//有目标状态下的监测
-        //{
-        //    memcpy(frame1, frame3, sizeof(frame1));
-        //    memcpy(frame2, shanxing, sizeof(shanxing));
-
-        /*}*/
-        //if (flag_yundong == 1 && flag_jingzhi == 0)//无目标状态下的监测
-        //{
-        memcpy(frame1, frame2, sizeof(frame1));
+        //memcpy(frame1, frame2, sizeof(frame1));
         memcpy(frame2, shanxing, sizeof(shanxing));
         /*        }*/
 
@@ -532,12 +527,12 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
         //frame2 = shanxing;
         flag_shanxing = 0;
         // 将二维数组转换为 cv::Mat
-        cv::Mat frame11 = cv::Mat(ROWS, COLS, CV_32FC1, frame1).clone(); // 克隆保证数据独立
+
         cv::Mat frame22 = cv::Mat(ROWS, COLS, CV_32FC1, frame2).clone();
 
         // 归一化到 0~255 方便显示
-        cv::Mat frame11Display, frame22Display;
-        cv::normalize(frame11, frame11Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+        //cv::Mat frame22Display;
+        //cv::normalize(frame11, frame11Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
         cv::normalize(frame22, frame22Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
         // 缩放比例
         double scale = 2.0;
@@ -548,16 +543,8 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
             return;
         }
 
-        // 如果是三通道彩色图像，转换为灰度图像
-        if (frame22Display.channels() == 3) {
-            cv::cvtColor(frame22Display, frame22Display, cv::COLOR_BGR2GRAY);
-        }
-        //cv::imshow("Frame22", frame22Display);
-        //cv::waitKey(0); // 保持窗口打开
-        // 保存图像到文件
-
         // 放大图像
-        cv::Mat frame11Resized, frame22Resized;
+        cv::Mat  frame22Resized;
         // cv::resize(frame11Display, frame11Resized, cv::Size(), scale, scale, cv::INTER_NEAREST);
         cv::resize(frame22Display, frame22Resized, cv::Size(), scale, scale, cv::INTER_NEAREST);// 显示图像
         // cv::imshow("Frame11", frame11Display);
@@ -569,14 +556,10 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
         }
         else
         {
-            std::cerr << "保存图像失败!" << std::endl;
+            std::cerr << "保存图像2失败!" << std::endl;
         }
-        //cv::Mat color_frame11, color_frame22;
-        // cv::applyColorMap(frame11Display, color_frame11, cv::COLORMAP_JET); // 使用伪彩色
-        //cv::applyColorMap(frame22Display, color_frame22, cv::COLORMAP_JET); // 使用伪彩色
-        //cv::imshow("Frame22", color_frame22);
-        //saveShanxingToFile(&frame22Display, ROWS, COLS, "frame22Display_data.csv");
-        // }
+
+
 
         // 
         //图像处理
@@ -594,180 +577,129 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
             // 调用 process_frame_difference 函数
             int result = process_frame_difference(frame11Display, frame22Display, no_target, centroid);//数据处理
             flag_target = no_target;
-            if (jishu_mubiao == 1)
-            {
 
-                cv::Mat frame44 = cv::Mat(ROWS, COLS, CV_32FC1, frame4).clone();
-                // 归一化到 0~255 方便显示
-                cv::Mat frame44Display;
-                cv::normalize(frame44, frame44Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-                int result2 = process_frame_difference(frame44Display, frame22Display, no_target1, centroid);//数据处理
-                flag_beijing = no_target1;
-                //saveData("D:/ceshi/Seriallog.txt", writeBufferimage, strlen(writeBufferimage), "COM1 1111", 0);
-                if (flag_target == 0 && flag_beijing == 1)
-                {
-                    flag_target = 1;
-                    //saveData("D:/ceshi/Seriallog.txt", writeBufferimage, strlen(writeBufferimage), "COM1 2222", 0);
-                }//这里之后可以考虑对背景均值进行考量
-                //if (flag_target == 1 && flag_beijing == 0)
-                //{
-                //    flag_target = 0;
-                //    saveData("D:/ceshi/Seriallog.txt", writeBufferimage, strlen(writeBufferimage), "COM1 2222", 0);
-                //}
-            }
+
             if (flag_zhiling == 0)
             {
 
-                if (biaozhi != 1)
-                {      //  memcpy(frame3, frame2, sizeof(frame3));
-                    cv::Mat frame44 = cv::Mat(ROWS, COLS, CV_32FC1, frame4).clone();
 
-                    // 归一化到 0~255 方便显示
-                    cv::Mat frame44Display;
-                    cv::normalize(frame44, frame44Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-                    int result2 = process_frame_difference(frame44Display, frame22Display, no_target1, centroid);//数据处理
-                    flag_beijing = no_target1;
-                }
-                if (flag_target == 0 && flag_beijing == 1)
+
+                jishu_guding++;
+                if (jishu_guding > 15)
                 {
-                    flag_target = 1;
-                    jishu_guding++;
-                    if (jishu_guding > 15)
-                    {
-                        //实验站
-                        //if (globalPn == 2255 && globalSn == 10)
-                        //{
-                        //    //serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
-                        //    //serialPort2.write(writeBufferxiaoshi2, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send jingzhi2", 0);
-                        //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
-                        //    //serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi2", 0);
-                        //}
-                        //else if (globalPn == 2254 && globalSn == 25)
-                        //{
-                        //    // serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
-                        //    // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi1", 0);
-                        //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
-                        //   // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi1", 0);
-                        //}
-                        ////考古实验站双声纳
-                        //if (globalPn == 2255 && globalSn == 10)
-                        //{
-                        //    serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
-                        //    //serialPort2.write(writeBufferxiaoshi2, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send jingzhi2", 0);
-                        //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
-                        //    //serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi2", 0);
-                        //}
-                        //else if (globalPn == 2254 && globalSn == 25)
-                        //{
-                        //     serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
-                        //    // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi1", 0);
-                        //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
-                        //   // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi1", 0);
-                        //}
-                        //考古实验站单声纳
-                        serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
-                        // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
-                        saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi", 0);
-                        //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
-                       // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
-                        saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi", 0);
+                    //实验站
+                    //if (globalPn == 2255 && globalSn == 10)
+                    //{
+                    //    //serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
+                    //    //serialPort2.write(writeBufferxiaoshi2, 16, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send jingzhi2", 0);
+                    //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
+                    //    //serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi2", 0);
+                    //}
+                    //else if (globalPn == 2254 && globalSn == 25)
+                    //{
+                    //    // serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
+                    //    // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi1", 0);
+                    //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
+                    //   // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi1", 0);
+                    //}
+                    ////考古实验站双声纳
+                    //if (globalPn == 2255 && globalSn == 10)
+                    //{
+                    //    serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
+                    //    //serialPort2.write(writeBufferxiaoshi2, 16, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send jingzhi2", 0);
+                    //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
+                    //    //serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi2", 0);
+                    //}
+                    //else if (globalPn == 2254 && globalSn == 25)
+                    //{
+                    //     serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
+                    //    // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi1", 0);
+                    //    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
+                    //   // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
+                    //    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi1", 0);
+                    //}
+                    //考古实验站单声纳
+                    serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
+                    // serialPort2.write(writeBufferxiaoshi, 16, bytesWritten12);
+                    saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM2 Send jingzhi", 0);
+                    //serialPort.write(writeBufferjingzhi, 31, bytesWritten21);
+                   // serialPort2.write(writeBufferjingzhi, 31, bytesWritten12);
+                    saveData("D:/ceshi/Seriallog.txt", writeBufferjingzhi, strlen(writeBufferjingzhi), "COM1 Send jingzhi", 0);
 
 
-                        memcpy(frame4, frame2, sizeof(frame4));
-                        flag_jingzhi = 0;
-                        flag_yundong = 1;
-                        jishu_guding = 0;
-                        flag_zhiling = 1;
-                        flag_target = 0;
-                        biaozhi = 0;
-                    }
+                    memcpy(frame1, frame2, sizeof(frame1));
+                    cv::Mat frame11 = cv::Mat(ROWS, COLS, CV_32FC1, frame1).clone(); // 克隆保证数据独立
+                    //cv::Mat frame11Display;
+                    cv::normalize(frame11, frame11Display, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+                    // 缩放比例
+                    double scale1 = 2.0;
+                    cv::Mat  frame11Resized;
+                    cv::resize(frame11Display, frame11Resized, cv::Size(), scale1, scale1, cv::INTER_NEAREST);
+                    saveImageWithTimestamp_beijing(frame11Display);
+                    //flag_jingzhi = 0;
+                    //flag_yundong = 1;
+                    jishu_guding = 0;
+                    flag_zhiling = 1;
+                    flag_target = 0;
+                    biaozhi = 0;
                 }
             }
-
-
-
-
-
         }
-        if (flag_target == 1)
-
+        if (flag_target == 1 && flag_zhiling == 1)
         {
-            biaozhi = 1;
-            jishu_mubiao++;
-            if (jishu_mubiao == 1)
-            {
-                first_mubao = jishi_mubiao;
-            }
-            if (jishu_mubiao == 2)
-            {
-                sec_mubao = jishi_mubiao;
-                chazhi_mubiao = sec_mubao - first_mubao;
 
-                //报警设置
-                if (chazhi_mubiao < 4)
-                {
-                    jishu_mubiao = 0;
-                    jishi_mubiao = 0;
-                    if (flag_target == 1 && flag_zhiling == 1)
-                    {
+            //serialPort2.open("COM2", 115200);
 
-                        //serialPort2.open("COM2", 115200);
+            // int bytesWritten1;
+            // 实验站
+            //if (globalPn == 2255 && globalSn == 10)
+            //{
+            //    //serialPort.write(writeBufferjinggao2, 16, bytesWritten21);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM1 Send jinagao2", 0);
+            //    serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM2 Send jinagao2", 0);
+            //}
+            //else if (globalPn == 2254 && globalSn == 25)
+            //{
+            //    //serialPort.write(writeBufferjinggao, 16, bytesWritten21);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
+            //    serialPort2.write(writeBufferjinggao, 16, bytesWritten12);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
+            //}
+            //char writeBuffer[] = "$HXXB,WAR,1*CK\r\n";
+            ////考古实验站双声纳
+            //if (globalPn == 2255 && globalSn == 10)
+            //{
+            //    serialPort.write(writeBufferjinggao, 16, bytesWritten21);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM1 Send jinagao2", 0);
+            //    //serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM2 Send jinagao2", 0);
+            //}
+            //else if (globalPn == 2254 && globalSn == 25)
+            //{
+            //    serialPort.write(writeBufferjinggao, 16, bytesWritten21);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
+            //    //serialPort2.write(writeBufferjinggao, 16, bytesWritten12);
+            //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
+            //}
+            //考古实验站
+            serialPort.write(writeBufferjinggao, 16, bytesWritten21);
+            saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao2), "COM1 Send jinagao", 0);
+            //serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
+            saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao2), "COM2 Send jinagao", 0);
 
-                        // int bytesWritten1;
-                        // 实验站
-                        //if (globalPn == 2255 && globalSn == 10)
-                        //{
-                        //    //serialPort.write(writeBufferjinggao2, 16, bytesWritten21);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM1 Send jinagao2", 0);
-                        //    serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM2 Send jinagao2", 0);
-                        //}
-                        //else if (globalPn == 2254 && globalSn == 25)
-                        //{
-                        //    //serialPort.write(writeBufferjinggao, 16, bytesWritten21);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
-                        //    serialPort2.write(writeBufferjinggao, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
-                        //}
-                        //char writeBuffer[] = "$HXXB,WAR,1*CK\r\n";
-                        ////考古实验站双声纳
-                        //if (globalPn == 2255 && globalSn == 10)
-                        //{
-                        //    serialPort.write(writeBufferjinggao, 16, bytesWritten21);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM1 Send jinagao2", 0);
-                        //    //serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao2), "COM2 Send jinagao2", 0);
-                        //}
-                        //else if (globalPn == 2254 && globalSn == 25)
-                        //{
-                        //    serialPort.write(writeBufferjinggao, 16, bytesWritten21);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
-                        //    //serialPort2.write(writeBufferjinggao, 16, bytesWritten12);
-                        //    saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
-                        //}
-                        //考古实验站
-                        serialPort.write(writeBufferjinggao, 16, bytesWritten21);
-                        saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao2), "COM1 Send jinagao", 0);
-                        //serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
-                        saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao2), "COM2 Send jinagao", 0);
+            //memcpy(frame3, frame1, sizeof(frame1));
 
-                        memcpy(frame3, frame1, sizeof(frame1));
+            flag_zhiling = 0;
 
-                        flag_zhiling = 0;
-                        flag_jingzhi = 1;
-                        flag_yundong = 0;
 
-                    }
-                }
-            }
         }
         if (flag_target == 0 && flag_zhiling == 0)
         {
@@ -813,18 +745,64 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
 
             biaozhi = 0;
             flag_zhiling = 1;
-            flag_jingzhi = 0;
-            flag_yundong = 1;
+
         }
 
-
-
-
     }
-    }
-
-
+    goto CONSUMER_START;
 }
+
+//--------------------------------------------------------------------------------------------------
+void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
+{
+    //Debug::log(Debug::Severity::Info, name.c_str(), "Ping data");
+    m_piss360 = &iss360;
+    if (isRecording)
+    {
+        static int pingDataCount = 0; // 静态变量用于保持计数器的值
+        //Debug::log(Debug::Severity::Info, name.c_str(), "Ping data");
+        Debug::log(Debug::Severity::Info, name.c_str(), "Ping data, Count: %d", ++pingDataCount); // 显示计数器的值
+        uint_t txPulseLengthMm = static_cast<uint_t>(iss360.settings.system.speedOfSound * iss360.settings.acoustic.txPulseWidthUs * 0.001 * 0.5);
+        txPulseLengthMm = Math::max<uint_t>(txPulseLengthMm, 150);
+
+        // 获取锁
+        std::unique_lock<std::mutex> lock(pingQueueMutex);
+        if (pingQueue.size() < MAX_QUEUE_SIZE) {
+            pingQueue.push(ping); // 将数据添加到队列中
+            consumerCondition.notify_one(); // 通知消费者线程
+        }
+        else {
+            std::cout << "Ping queue is full. Dropping ping data!!!!!!" << std::endl;
+            pingQueue.pop(); // 如果队列已满，丢弃最旧的数据
+            pingQueue.push(ping); // 添加新的数据
+            consumerCondition.notify_one(); // 通知消费者线程
+        }
+        std::cout << "Producer thread add data!" << std::endl; // 调试输出
+        lock.unlock(); // 解锁互斥量
+
+        sonarDataStore.add(ping, txPulseLengthMm);
+        // recordPingData(iss360, ping, txPulseLengthMm);
+        m_pingCount++;
+
+        if (m_pingCount % (Sonar::maxAngle / iss360.settings.setup.stepSize) == 0)
+        {
+            m_pingCount = 0;
+            /*
+            m_texture.renderTexture(sonarDataStore, m_palette, false);
+            BmpFile::save("snrTex.bmp", reinterpret_cast<const uint32_t*>(&m_texture.buf[0]), 32, m_texture.width, m_texture.height);
+
+            m_circular.render(sonarDataStore, m_palette, true);
+            BmpFile::save("snrCi.bmp", reinterpret_cast<const uint32_t*>(&m_circular.buf[0]), 32, m_circular.width, m_circular.height);
+            */
+        }
+        return;
+
+    }
+}
+
+
+
+
 void SonarApp::recordPingData(const Sonar& iss360, const Sonar::Ping& ping, uint_t txPulseLengthMm)
 {
     //先判断是否采集shanxing数据
@@ -1093,7 +1071,7 @@ void SonarApp::readUartData(const std::string& portName, uint32_t baudrate)
 {
     SeriallPort serialPort;
     SerialPort uart("COM6");
-    
+
     if (uart.open()) {
         if (!uart.config(baudrate, 8, Uart::Parity::None, Uart::StopBits::One)) {
             Debug::log(Debug::Severity::Error, "SonarApp", "Failed to configure UART port.");
@@ -1188,4 +1166,31 @@ void SonarApp::saveShanxingToFile(const float* shanxing, int rows, int cols, con
 
     file.close(); // 关闭文件
     std::cout << "Shanxing data saved to " << filename << std::endl;
+}
+void SonarApp::saveImageWithTimestamp_beijing(const cv::Mat& image)
+{
+    // 获取当前时间
+    std::time_t now = std::time(nullptr);
+    std::tm* now_tm = std::localtime(&now);
+
+    // 格式化时间戳
+    std::ostringstream oss;
+    oss << "D:/mubiao/beijing_"
+        << (now_tm->tm_year + 1900) << "-"
+        << (now_tm->tm_mon + 1) << "-"
+        << now_tm->tm_mday << "_"
+        << now_tm->tm_hour << "-"
+        << now_tm->tm_min << "-"
+        << now_tm->tm_sec << ".png";
+
+    std::string filename = oss.str();
+
+    // 保存图像
+    bool result2 = cv::imwrite(filename, image);
+    if (result2) {
+        std::cout << "图像已保存到文件: " << filename << std::endl;
+    }
+    else {
+        std::cerr << "保存图像失败!" << std::endl;
+    }
 }

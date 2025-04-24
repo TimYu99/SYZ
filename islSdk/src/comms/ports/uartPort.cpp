@@ -6,10 +6,10 @@
 
 using namespace IslSdk;
 
-std::vector<uint32_t> UartPort::defaultBaudrates = { 115200, 9600, 57600, 38400, 19200, 4800 };
-
+//std::vector<uint32_t> UartPort::defaultBaudrates = { 115200, 9600, 57600, 38400, 19200, 4800 };
+std::vector<uint32_t> UartPort::defaultBaudrates = { 115200};
 //--------------------------------------------------------------------------------------------------
-UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 250)
+UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 10000)
 {
     m_rxBuf = nullptr;
     m_eventOpen = false;

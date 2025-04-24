@@ -83,11 +83,11 @@ namespace IslSdk
         Slot<Sonar&, const Sonar::Ping&> slotPingData{ this, &SonarApp::callbackPingData };
         Slot<Sonar&, const Sonar::Echos&> slotEchoData{ this, &SonarApp::callbackEchoData };
         Slot<Sonar&, const Sonar::CpuPowerTemp& > slotPwrAndTemp{ this, &SonarApp::callbackPwrAndTemp };
-        Slot<Sonar&> slotMotorSlip { this, &SonarApp::callbackMotorSlip };
-        Slot<Sonar&, bool_t> slotMotorMoveComplete { this, &SonarApp::callbackMotorMoveComplete };
+        Slot<Sonar&> slotMotorSlip{ this, &SonarApp::callbackMotorSlip };
+        Slot<Sonar&, bool_t> slotMotorMoveComplete{ this, &SonarApp::callbackMotorMoveComplete };
         void sendUartData(const std::string& portName, uint32_t baudrate, const std::vector<uint8_t>& data);
         void saveShanxingToFile(const float* shanxing, int rows, int cols, const std::string& filename);
-        
+
     private:
         //新添加
         std::string dataFolder_;
@@ -98,10 +98,17 @@ namespace IslSdk
         int currentCol = 0;// 当前存储的列
         void setDataFolder(const std::string& basePath);
         void updatePingDataFilename();
+        void saveImageWithTimestamp_beijing(const cv::Mat& image);
         void writeInitialLog();
         void SonarApp::recordPingData(const Sonar& iss360, const Sonar::Ping& ping, uint_t txPulseLengthMm);
 
-
+        // 多线程处理
+#define MAX_QUEUE_SIZE 1000
+        std::queue <Sonar::Ping> pingQueue;
+        std::mutex pingQueueMutex;
+        std::condition_variable consumerCondition;
+        Sonar* m_piss360;
+        void consumePingData();
 
         AhrsManager ahrs;
         GyroManager gyro;
@@ -113,7 +120,7 @@ namespace IslSdk
         uint_t m_pingCount;
         SonarDataStore sonarDataStore;
         virtual void connectEvent(Device& device);
-       
+
         void callbackSettingsUpdated(Sonar& sonar, bool_t ok, Sonar::Settings::Type settingsType);
         void callbackHeadIndexesAcquired(Sonar& sonar, const Sonar::HeadIndexes& data);
         void callbackEchoData(Sonar& sonar, const Sonar::Echos& data);
