@@ -4,9 +4,21 @@
 #include "platform/debug.h"
 #include "global.h" // 包含 global.h
 #include "data_logger.h"
+
+#include <map>
+#include <string>
+
 using namespace IslSdk;
 char sonar1[] = "sonar1 \r\n";
-char sonar2[] = "sonar2 \r\n";
+char sonar2 [] = "sonar2 \r\n";
+
+// 每一个声呐的工作状态；1：正常工作；0：断线重连中；
+extern std::map < std::string, int > sonar_status;
+// 每一个声呐的断线重连次数
+extern std::map < std::string, int > sonar_reconnect_count;
+// 是否有一个声呐正在工作
+extern bool sonar_working_flag;
+
 //--------------------------------------------------------------------------------------------------
 App::App(const std::string& name) : name(name), m_device(nullptr)
 {
@@ -68,6 +80,14 @@ void App::callbackDeleteted(Device& device)
 void App::callbackConnect(Device& device)
 {
     Debug::log(Debug::Severity::Notice, name.c_str(), "%04u.%04u connected and ready%s", device.info.pn, device.info.sn, device.bootloaderMode() ? " (bootloader mode)" : "");
+
+    // 这次是重连
+    if (sonar_status[device.info.pnSnAsStr()] == 0) {
+        sonar_reconnect_count[device.info.pnSnAsStr()] = 0; // 重连次数清零
+        printf("%s 设备重连计数器清零: %d\n", device.info.pnSnAsStr().c_str(), sonar_status[device.info.pnSnAsStr()]);
+
+    }
+
     // 保存设备信息到全局变量
     globalPn = device.info.pn;
     globalSn = device.info.sn;
@@ -90,6 +110,17 @@ void App::callbackConnect(Device& device)
 //--------------------------------------------------------------------------------------------------
 void App::callbackDisconnect(Device& device)
 {
+    // 更新 sonar_status 中的设备信息
+    std::string key = device.info.pnSnAsStr();
+    sonar_status[key] = 0; // 设置状态为 2，表示断线重连中
+    bool temp_flag = 0;
+    for (auto& it : sonar_status) {
+        printf("%s 设备的状态：%d\n", it.first.c_str(), it.second);
+        temp_flag |= it.second; // 检查是否有设备在工作
+    }
+    sonar_working_flag = temp_flag;
+    printf("是否有设备在工作：%d\n", sonar_working_flag);
+
     Debug::log(Debug::Severity::Notice, name.c_str(), "%04u.%04u disconnected", device.info.pn, device.info.sn);
 }
 //--------------------------------------------------------------------------------------------------

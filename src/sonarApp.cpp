@@ -214,6 +214,23 @@ namespace msis_pkg
     }
 
 } // namespace msis_pkg
+
+std::string SeriallPort::calculateChecksum(const std::string& message)
+{
+    uint8_t checksum = 0;
+    size_t start = message.find('$');
+    size_t end = message.find('*');
+    if (start != std::string::npos && end != std::string::npos && start < end) {
+        for (size_t i = start + 1; i < end; ++i) {
+            checksum ^= message[i];
+        }
+    }
+
+    // Convert checksum to corresponding ASCII characters
+    char asciiChecksum = static_cast<char>(checksum);
+    return std::string(1, asciiChecksum);
+}
+
 //------------------------------------------ ºó¼Ó½áÊø ----------
 //--------------------------------------------------------------------------------------------------
 SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), sequenceNumber_(1)

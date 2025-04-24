@@ -9,7 +9,8 @@ using namespace IslSdk;
 std::vector<uint32_t> UartPort::defaultBaudrates = { 115200, 9600, 57600, 38400, 19200, 4800 };
 
 //--------------------------------------------------------------------------------------------------
-UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 250)
+// 最后一个参数是：第一次搜索时的轮询间隔，单位ms，注意此参数不适用于断线情况下的搜索轮询间隔
+UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 5000)
 {
     m_rxBuf = nullptr;
     m_eventOpen = false;
@@ -112,7 +113,8 @@ void UartPort::discoverIslDevices(uint16_t pid, uint16_t pn, uint16_t sn)
 {
     for (uint_t i = 0; i < defaultBaudrates.size(); i++)
     {
-        SysPort::discoverIslDevices(pid, pn, sn, ConnectionMeta(defaultBaudrates[i]), discoveryTimeoutMs, 1);
+        // 第一次发现设备的时候，对于每个波特率查找的次数；注意此查找次数，不适用于断线重连的查找次数
+        SysPort::discoverIslDevices(pid, pn, sn, ConnectionMeta(defaultBaudrates[i]), discoveryTimeoutMs, 1000);
     }
 }
 //--------------------------------------------------------------------------------------------------

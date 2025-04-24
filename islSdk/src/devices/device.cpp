@@ -9,7 +9,20 @@
 #include "logging/logPlayer.h"
 #include "utils/stringUtils.h"
 
+#include <map>
+#include <string>
+
 using namespace IslSdk;
+
+// 每一个声呐的工作状态；1：正常工作；0：断线重连中；
+std::map < std::string, int > sonar_status;
+// 声呐对应的端口名字
+std::map < std::string, std::string > sonar_port_name;
+// 每一个声呐的断线重连次数
+std::map < std::string, int > sonar_reconnect_count;
+// 是否有一个声呐正在工作
+bool sonar_working_flag;
+
 
 //--------------------------------------------------------------------------------------------------
 Device::Info::Info() : pid(Device::Pid::Unknown), pn(0), sn(0), config(0), mode(0), status(0),
@@ -133,8 +146,10 @@ Device::Device(const Device::Info& info) : IslHdlc(), m_info(info)
     m_connectionDataSynced = false;
     m_reconnectCount = 0;
     m_resetting = false;
-    m_searchTimeoutMs = 1000;
-    m_searchCount = 30;
+    // 断线重连情况下的轮询间隔时间
+    m_searchTimeoutMs = 10000;
+    // 断线重连情况下重试的轮询次数
+    m_searchCount = 6300000; // 6300000 = 6300 * 1000ms = 6300s = 105min
     m_packetResendLimit = 2;
     m_deviceTimeOut = 0;
     m_deleteTimer = Time::getTimeMs() + deleteAfterTime;          // Delete this device if not connected within deleteAfterTime milliseconds
@@ -299,6 +314,7 @@ void Device::updateConnection(const ConnectionMeta& meta)
     }
 }
 //---------------------------------------------------------------------------------------------------
+// 断线重连程序入口，调用串口对应的功能函数
 uint_t Device::reDiscover(uint_t timeoutMs, uint_t count)
 {
     if (m_connection && count)
@@ -338,9 +354,11 @@ bool_t Device::timeoutEvent()
         m_resetting = false;
     }
 
+    // 断线重连的轮询走的是这个分支
     if (m_timeoutCount >= m_packetResendLimit)
     {
         debugLog("Device", "Comms lost");
+        // 启动断线重连
         m_deleteTimer = Time::getTimeMs() + reDiscover(m_searchTimeoutMs, m_searchCount);
         tryAgain = false;
     }

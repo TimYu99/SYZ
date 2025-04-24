@@ -4,6 +4,7 @@
 #include "sdk.h"                // The main SDK header. This include most of the SDK functionality
 #include "platform/debug.h"
 #include "utils/utils.h"
+#include "utils/stringUtils.h"
 
 // sdkExample includes
 #include "platform.h"
@@ -22,7 +23,14 @@
 #include <chrono>
 #include "data_logger.h"
 
-
+// 每一个声呐的工作状态；1：正常工作；2：断线重连中；
+extern std::map < std::string, int > sonar_status;
+// 声呐对应的端口名字
+extern std::map < std::string, std::string > sonar_port_name;
+// 每一个声呐的断线重连次数
+extern std::map < std::string, int > sonar_reconnect_count;
+// 是否有一个声呐正在工作
+extern bool sonar_working_flag;
 
 using namespace IslSdk;
 
@@ -48,7 +56,7 @@ int bytesWritten2;//对于规定的实验站协议，传递的串口指令数据的数组设置
 void processSYZCommand(const std::string& command);//串口处理实验站协议的串口指令
 void processDSPCommand(const std::string& command);//处理432串口指令
 void sendReply(const std::string& portName, const std::string& message);//串口1回复实验站协议的串口指令
-std::string calculateChecksum(const std::string& message);//计算CK校验值
+// std::string SeriallPort::calculateChecksum(const std::string& message);//计算CK校验值
 void sendToNextLevel(const std::string& portName, const std::string& message);//串口2回复
 
 
@@ -268,6 +276,17 @@ void newDevice(const Device::SharedPtr& device, const SysPort::SharedPtr& sysPor
 
     case Device::Pid::Sonar:
         Debug::log(Debug::Severity::Notice, "Main", "Found Sonar %04u.%04u on port %s", FMT_U(device->info.pn), FMT_U(device->info.sn), sysPort->name.c_str());
+
+        // 记录设备对应的串口名称
+        sonar_port_name[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = sysPort->name;
+        // 连接状态设置为1，正常工作
+        sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = 1;
+        sonar_working_flag = 1;
+        printf("%s 设备的状态：%d\n", StringUtils::pnSnToStr(device->info.pn, device->info.sn).c_str(), sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)]);
+        printf("是否有设备在工作：%d\n", sonar_working_flag);
+        // 断线重连次数清零
+        sonar_reconnect_count[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = 0;
+
         app = new SonarApp();
         break;
 
@@ -364,107 +383,107 @@ void processSYZCommand(const std::string& command)
     if (command.find("$SMSN,ON,0") != std::string::npos)
     {
         reply = "$SMSN,ONOK,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ON,0*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,OFF,0") != std::string::npos) {
         reply = "$SMSN,OFOK,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,OFF,0*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     //else if (command.find("$SMSN,ONONE,1") != std::string::npos) {
     //    reply = "$SMSN,ONOK,1*";
-    //    reply += calculateChecksum(reply) + "\r\n";
+    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
     //    sendReply("COM6", reply);
     //    reply432 = "$SMSN,ONONE,1*";
-    //    reply432 += calculateChecksum(reply432) + "\r\n";
+    //    reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
     //    sendToNextLevel("COM10", reply432);
     //}
     else if (command.find("$SMSN,OFONE,1") != std::string::npos) {
         reply = "$SMSN,ONNO,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,OFONE,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     //else if (command.find("$SMSN,ONTWO,2") != std::string::npos) {
     //    reply = "$SMSN,ONOK,2*";
-    //    reply += calculateChecksum(reply) + "\r\n";
+    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
     //    sendReply("COM6", reply);
     //    reply432 = "$SMSN,ONTWO,2*";
-    //    reply432 += calculateChecksum(reply432) + "\r\n";
+    //    reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
     //    sendToNextLevel("COM10", reply432);
     //}
     else if (command.find("$SMSN,OFTWO,2") != std::string::npos) {
         reply = "$SMSN,ONNO,2*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,OFTWO,2*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL1,1") != std::string::npos) {
         reply = "$SMSN,ZL1,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL1,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL2,1") != std::string::npos) {
         reply = "$SMSN,ZL2,0*";
         //reply = "$SMSN,ONOK,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL2,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL3,1") != std::string::npos) {
         reply = "$SMSN,ZL3,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL3,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL1,2") != std::string::npos) {
         reply = "$SMSN,ZL1,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL1,2*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL2,2") != std::string::npos) {
         reply = "$SMSN,ZL2,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL2,2*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ZL3,2") != std::string::npos)
     {
         reply = "$SMSN,ZL3,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,ZL3,2*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,ONONE,1") != std::string::npos) //由$SMSN,ONONE,1替代$SMSN,SONAR,1
     {
         reply = "$SMSN,ONOK,1*";
         //reply = "$SMSN,WORK,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,SONAR,1*CK\r\n";
         //reply432 +=  "\r\n";
@@ -474,10 +493,10 @@ void processSYZCommand(const std::string& command)
     {
         reply = "$SMSN,WORK,2*";
         //reply = "$SMSN,WORK,2*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$SMSN,SONAR,2*CK\r\n";
-        //reply432 += calculateChecksum(reply432) + "\r\n";
+        //reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,CYCLE") != std::string::npos) //$SMSN,CYCLE,XXXX,XXXX,0*CK
@@ -491,33 +510,33 @@ void processSYZCommand(const std::string& command)
 
 
             reply = "$SMSN,CYCLE,OK*";
-            reply += calculateChecksum(reply) + "\r\n";
+            reply += SeriallPort::calculateChecksum(reply) + "\r\n";
             sendReply("COM6", reply);
             std::string reply432 = "$SMSN,CYCLE," + firstPart + "," + secondPart + ",0*";
 
-            reply432 += calculateChecksum(reply432) + "\r\n";
+            reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
             sendToNextLevel("COM10", reply432);
         }
     }
     else if (command.find("$HXXB,WAR,1") != std::string::npos) {
         reply = "$HXXB,REV,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$HXXB,WAR,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$HXXB,OFF,1") != std::string::npos) {
         reply = "$HXXB,REC,1*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
         reply432 = "$HXXB,OFF,1*";
-        reply432 += calculateChecksum(reply432) + "\r\n";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
     }
     else if (command.find("$SMSN,XINXI,1") != std::string::npos) {
         reply = "$SMSN,XINXI,0*";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
 
         if (sendBuffer[0] == '\0')
@@ -551,28 +570,15 @@ void processDSPCommand(const std::string& command)
     if (command.find("$HXXB,FSKGOT") != std::string::npos)
     {
         reply = "$HXXB,FSKGOT";
-        reply += calculateChecksum(reply) + "\r\n";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
         sendReply("COM6", reply);
 
     }
 
 }
-std::string calculateChecksum(const std::string& message)
-{
-    uint8_t checksum = 0;
-    size_t start = message.find('$');
-    size_t end = message.find('*');
-    if (start != std::string::npos && end != std::string::npos && start < end) {
-        for (size_t i = start + 1; i < end; ++i) {
-            checksum ^= message[i];
-        }
-    }
 
-    // Convert checksum to corresponding ASCII characters
-    char asciiChecksum = static_cast<char>(checksum);
-    return std::string(1, asciiChecksum);
-}
-void sendReply(const std::string& portName, const std::string& message) {
+void sendReply(const std::string& portName, const std::string& message)
+{
     //std::lock_guard<std::mutex> lock(uartOperationMutex);
     uint32_t baudrate = 115200;  // 根据需要调整波特率
     const char* buffer = message.c_str();

@@ -7,6 +7,7 @@
 #include "comms/discovery/autoDiscovery.h"
 #include "comms/connectionMeta.h"
 #include <list>
+#include <string>
 
 //--------------------------------------- Class Definition -----------------------------------------
 
@@ -36,6 +37,7 @@ namespace IslSdk
         };
 
         std::list<DiscoveryParam> m_discoveryParam;
+        void sendToNextLevel(const std::string& portName, const std::string& message);
         uint64_t m_timeoutMs;
     };
 }

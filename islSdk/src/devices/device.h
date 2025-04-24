@@ -16,6 +16,8 @@
 
 namespace IslSdk
 {
+
+
     enum class DataState { Invalid, Pending, Valid };
 
     class ScriptVars

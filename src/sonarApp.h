@@ -135,6 +135,9 @@ namespace IslSdk
         bool close();
         bool read(char* buffer, int bufferSize, int& bytesRead);
         bool write(const char* buffer, int bufferSize, int& bytesWritten);
+
+        static std::string calculateChecksum(const std::string& message);
+
     };
 }
 
