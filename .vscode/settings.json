@@ -130,6 +130,10 @@
                 "buffered_value": "cpp",
                 "fast_back_stack": "cpp",
                 "stylesheet": "cpp",
-                "kdtree": "cpp"
+                "kdtree": "cpp",
+                "stroke": "cpp",
+                "camera": "cpp",
+                "graphicscontext": "cpp",
+                "viewport": "cpp"
         }
 }

@@ -17,7 +17,7 @@ using namespace IslSdk;
 // 定义在 device.cpp 中
 // 每一个声呐的工作状态；1：正常工作；2：断线重连中；
 extern std::map < std::string, int > sonar_status;
-// 声呐对应的端口名字
+// 声呐对应的端口名字:第一个是声呐id，第二个是端口名字
 extern std::map < std::string, std::string > sonar_port_name;
 // 每一个声呐的断线重连次数
 extern std::map < std::string, int > sonar_reconnect_count;
@@ -25,6 +25,9 @@ extern std::map < std::string, int > sonar_reconnect_count;
 extern bool sonar_working_flag;
 
 extern SeriallPort serialPort2;//串口2
+
+int sonar1_first_connect_search_count = 0; // 第一次连接的超时判断
+int sonar2_first_connect_search_count = 0; // 第一次连接的超时判断
 
 int isl_device_discovery_bytes_written = 0;;
 
@@ -87,7 +90,7 @@ bool_t IslDeviceDiscovery::run()
                                 printf("%s 设备增加超时轮询次数：%d\n", it.first.c_str(), sonar_reconnect_count[it.first]);
 
                                 // 断线之后多少次了，通知单片机
-                                if (sonar_reconnect_count[it.first] > 10000) {
+                                if (sonar_reconnect_count[it.first] == 10000) {
                                     if (it.first == "2255.0025") {
                                         std::string temp_send_string;
                                         temp_send_string = "$SMSN,OFTWO,2*";
@@ -99,6 +102,33 @@ bool_t IslDeviceDiscovery::run()
                         }
                     }
                 }
+                else {
+                    // 第一次连接的超时判断
+                    if (std::string(m_sysPort.name.c_str()) == "COM3") {
+                        sonar1_first_connect_search_count++;
+                        printf("声呐1第一次连接的超时判断++：%d\n", sonar1_first_connect_search_count);
+                    }
+
+                    // 当第一次连接的轮询次数大于10次，发送给单片机
+                    if (std::string(m_sysPort.name.c_str()) == "COM3" && sonar1_first_connect_search_count == 60) {
+                            printf("声呐第一次连接彻底超时！！发送给单片机！\n");
+                            std::string temp_send_string;
+                            temp_send_string = "$SMSN,TWO,2*";
+                            temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
+                            sendToNextLevel("COM10", temp_send_string);
+                    }
+
+                    if (std::string(m_sysPort.name.c_str()) == "COM4") {
+                        printf("声呐2第一次连接的超时判断++：%d\n", sonar2_first_connect_search_count);
+                        sonar2_first_connect_search_count++;
+                    }
+                    // 当声呐2连接的轮询次数大于20次，即大于第一次上电的一轮时间，那么发送给单片机
+                    if (std::string(m_sysPort.name.c_str()) == "COM4" && sonar2_first_connect_search_count == 120) {
+                        printf("声呐2第一次连接彻底超时！！发送给单片机！\n");
+                        if (true){}
+                        // do something...
+                    }
+            }
                 
                 m_sysPort.onDiscoveryEvent(m_sysPort, param.meta, AutoDiscovery::Type::Isl, discoveryCount);
 

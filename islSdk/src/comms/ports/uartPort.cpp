@@ -6,11 +6,11 @@
 
 using namespace IslSdk;
 
-std::vector<uint32_t> UartPort::defaultBaudrates = { 115200, 9600, 57600, 38400, 19200, 4800 };
+std::vector<uint32_t> UartPort::defaultBaudrates = { 115200 };
 
 //--------------------------------------------------------------------------------------------------
 // 最后一个参数是：第一次搜索时的轮询间隔，单位ms，注意此参数不适用于断线情况下的搜索轮询间隔
-UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 5000)
+UartPort::UartPort(const std::string& name) : SysPort(name, ClassType::Serial, Type::Serial, 2000)
 {
     m_rxBuf = nullptr;
     m_eventOpen = false;

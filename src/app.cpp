@@ -85,7 +85,7 @@ void App::callbackConnect(Device& device)
     if (sonar_status[device.info.pnSnAsStr()] == 0) {
         sonar_reconnect_count[device.info.pnSnAsStr()] = 0; // 重连次数清零
         printf("%s 设备重连计数器清零: %d\n", device.info.pnSnAsStr().c_str(), sonar_status[device.info.pnSnAsStr()]);
-
+        sonar_working_flag = 1; // 设置工作标志为1，有机器在工作
     }
 
     // 保存设备信息到全局变量

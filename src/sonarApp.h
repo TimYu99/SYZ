@@ -100,8 +100,14 @@ namespace IslSdk
         void updatePingDataFilename();
         void writeInitialLog();
         void SonarApp::recordPingData(const Sonar& iss360, const Sonar::Ping& ping, uint_t txPulseLengthMm);
-
-
+        void saveImageWithTimestamp_beijing(const cv::Mat& image);
+        
+        #define MAX_QUEUE_SIZE 1000
+        std::queue <Sonar::Ping> pingQueue;
+        std::mutex pingQueueMutex;
+        std::condition_variable consumerCondition;
+        Sonar* m_piss360;
+        void consumePingData();
 
         AhrsManager ahrs;
         GyroManager gyro;
@@ -113,7 +119,7 @@ namespace IslSdk
         uint_t m_pingCount;
         SonarDataStore sonarDataStore;
         virtual void connectEvent(Device& device);
-       
+        
         void callbackSettingsUpdated(Sonar& sonar, bool_t ok, Sonar::Settings::Type settingsType);
         void callbackHeadIndexesAcquired(Sonar& sonar, const Sonar::HeadIndexes& data);
         void callbackEchoData(Sonar& sonar, const Sonar::Echos& data);
