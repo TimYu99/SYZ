@@ -89,7 +89,7 @@ int sec_mubao = 0;
 int chazhi_mubiao = 0;
 int biaozhi = 0;
 
-void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height);
+//void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height);
 
 std::string IslSdk::messageToString(const Message& msg)
 {
@@ -533,7 +533,7 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
         lock.unlock(); // 解锁互斥量
 
         sonarDataStore.add(ping, txPulseLengthMm);
-        recordPingData(iss360, ping, txPulseLengthMm);
+        //recordPingData(iss360, ping, txPulseLengthMm);
         m_pingCount++;
 
         // 测试下发参数设定指令
@@ -934,39 +934,39 @@ void SonarApp::saveShanxingToFile(const float* shanxing, int rows, int cols, con
     std::cout << "Shanxing data saved to " << filename << std::endl;
 }
 
-#include <ostream>
-#include <fstream>
-std::ofstream out("mat.txt", std::ios::out | std::ios::app); // 打开文件以追加模式写入
-
-void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height)
-{
-    // 创建一个 CV_8UC4 类型的 Mat，表示 8 位无符号整数，4 通道（RGBA）
-    cv::Mat mat(height, width, CV_8UC4);
-
-    // 遍历每个像素，将 BMP 数据拷贝到 Mat 中
-    for (uint_t row = 0; row < height; row++) {
-        for (uint_t col = 0; col < width; col++) {
-            uint32_t pixel = image[row * width + col];
-
-            // 提取 RGBA 通道
-            uint8_t r = (pixel >> 16) & 0xFF;
-            uint8_t g = (pixel >> 8) & 0xFF;
-            uint8_t b = (pixel >> 0) & 0xFF;
-            uint8_t a = 0;
-            // uint8_t a = (pixel >> 24) & 0xFF;
-
-            // 将像素值存储到 Mat 中
-            cv::Vec4b& matPixel = mat.at<cv::Vec4b>(row, col);
-            matPixel[0] = b; // OpenCV 使用 BGRA 顺序
-            matPixel[1] = g;
-            matPixel[2] = r;
-            matPixel[3] = a;
-        }
-    }
-
-    cv::Mat resizedMat;
-    cv::resize(mat, resizedMat, cv::Size(), 4.0, 4.0, cv::INTER_LINEAR);
-    cv::imshow("实时声呐扫描图放大", resizedMat);
+//#include <ostream>
+//#include <fstream>
+//std::ofstream out("mat.txt", std::ios::out | std::ios::app); // 打开文件以追加模式写入
+//
+//void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height)
+//{
+//    // 创建一个 CV_8UC4 类型的 Mat，表示 8 位无符号整数，4 通道（RGBA）
+//    cv::Mat mat(height, width, CV_8UC4);
+//
+//    // 遍历每个像素，将 BMP 数据拷贝到 Mat 中
+//    for (uint_t row = 0; row < height; row++) {
+//        for (uint_t col = 0; col < width; col++) {
+//            uint32_t pixel = image[row * width + col];
+//
+//            // 提取 RGBA 通道
+//            uint8_t r = (pixel >> 16) & 0xFF;
+//            uint8_t g = (pixel >> 8) & 0xFF;
+//            uint8_t b = (pixel >> 0) & 0xFF;
+//            uint8_t a = 0;
+//            // uint8_t a = (pixel >> 24) & 0xFF;
+//
+//            // 将像素值存储到 Mat 中
+//            cv::Vec4b& matPixel = mat.at<cv::Vec4b>(row, col);
+//            matPixel[0] = b; // OpenCV 使用 BGRA 顺序
+//            matPixel[1] = g;
+//            matPixel[2] = r;
+//            matPixel[3] = a;
+//        }
+//    }
+//
+//    cv::Mat resizedMat;
+//    cv::resize(mat, resizedMat, cv::Size(), 4.0, 4.0, cv::INTER_LINEAR);
+//    cv::imshow("实时声呐扫描图放大", resizedMat);
 
 
     // out << "-----------------------------------------------------------\n";
@@ -987,11 +987,11 @@ void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, ui
 
     // out << "-----------------------------------------------------------\n";
 
-    cv::imshow("实时声呐扫描图", mat); // 显示图像
-    cv::waitKey(1); // 等待 1 毫秒以更新窗口
-
-    return;
-}
+//    cv::imshow("实时声呐扫描图", mat); // 显示图像
+//    cv::waitKey(1); // 等待 1 毫秒以更新窗口
+//
+//    return;
+//}
 
 void SonarApp::consumePingData()
 {
@@ -1068,7 +1068,8 @@ CONSUMER_START:
 
         // 
         //图像处理
-        if (jishu_shanxing > 1) {
+        if (jishu_shanxing > 1) 
+        {
             int no_target = 0;  // 初始化无目标标志
             int no_target1 = 0;  // 初始化无目标标志
             Centroid centroid;  // 初始化质心结构体

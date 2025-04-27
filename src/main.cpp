@@ -152,6 +152,11 @@ int main(int argc, char** argv)
         if (bytesRead1 > 0)
         {
             std::cout << "接收到外部串口数据: " << std::string(readBuffer1, bytesRead1) << std::endl;
+            // 检查数据是否以 0x00 开头
+            if (static_cast<unsigned char>(readBuffer1[0]) == 0x00) {
+                std::cout << "接收到以 0x00 开头的数据，跳过保存。" << std::endl;
+                continue;
+            }
             saveData("D:/ceshi/Seriallog.txt", readBuffer1, strlen(readBuffer1), "COM1 Recieved", 0);
             processSYZCommand(readBuffer1);
 
