@@ -5,7 +5,7 @@ project(sdkExample LANGUAGES CXX)
 include_directories( ${PROJECT_SOURCE_DIR}/islSdk/src)
 include_directories( ${PROJECT_SOURCE_DIR}/src)
 
-set(OpenCV_DIR "E:/RuanJian/Files/opencv/build") # OpenCVConfig.cmake 所在的目录//根据实际情况修改
+set(OpenCV_DIR "E:/lib/opencv/opencv4.6.0/opencv/build/x64/vc15/lib") # OpenCVConfig.cmake 所在的目录//根据实际情况修改
 # 查找 OpenCV
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})

@@ -134,6 +134,8 @@
                 "stroke": "cpp",
                 "camera": "cpp",
                 "graphicscontext": "cpp",
-                "viewport": "cpp"
+                "viewport": "cpp",
+                "depthoffset": "cpp",
+                "modelsource": "cpp"
         }
 }

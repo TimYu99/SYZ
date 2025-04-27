@@ -722,8 +722,49 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     uint8_t minrange = temp_ping_.minRange;
     uint8_t maxrange = temp_ping_.max_range;
 
+// #define USE_C_FILE_STREAM
+#ifndef USE_C_FILE_STREAM
+    // 构造文件名
+    char filename[256];
+    snprintf(filename, sizeof(filename), "%s/all_ping_data1.txt", dataFolder_.c_str());
 
+    // 打开文件（以追加模式）
+    FILE* outputFile = fopen(allPingDataFilename_.c_str(), "a");
+    if (outputFile != NULL) {
+        // 写入数据到文件
+        fprintf(outputFile, "Processed Ping Data:\n");
 
+        // 写入时间戳
+        char timeBuffer[64];
+        struct tm* localTime = localtime(&timestamp);
+        strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localTime);
+        fprintf(outputFile, "Timestamp: %s\n", timeBuffer);
+
+        // 写入其他参数
+        fprintf(outputFile, "Angle: %f\n", temp_ping_.angle_du);
+        fprintf(outputFile, "Step Size: %f\n", temp_ping_.angle_stepSize);
+        fprintf(outputFile, "Min Range (m): %2f\n", temp_ping_.minRange);
+        fprintf(outputFile, "Max Range (m): %2f\n", temp_ping_.max_range);
+        fprintf(outputFile, "Speed of Sound: %3f\n", iss360.settings.system.speedOfSound);
+        fprintf(outputFile, "Tx Pulse Width (us): %f\n", iss360.settings.acoustic.txPulseWidthUs);
+        fprintf(outputFile, "Tx Pulse Length (mm): %f\n", txPulseLengthMm);
+        fprintf(outputFile, "Data Count: %1f\n", ping.data.size());
+
+        // 写入 Beam Data
+        fprintf(outputFile, "Beam Data: ");
+        for (int i = 0; i < temp_ping_.data_count; ++i) {
+            fprintf(outputFile, "%1f ", temp_ping_.beam_data[i]);
+        }
+        fprintf(outputFile, "\n");
+
+        // 关闭文件
+        fclose(outputFile);
+        printf("Data appended to %s\n", allPingDataFilename_.c_str());
+    }
+    else {
+        perror("Failed to open file");
+    }
+#else
     std::stringstream filenameStream;
     // 生成文件名，使用时间戳作为文件名的一部分
 
@@ -760,6 +801,9 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
         std::cerr << "Unable to open the file for writing." << std::endl;
     }
 
+#endif
+
+    
     // 发送格式化数据
     std::string portName = "COM6"; // 根据需要调整
     uint32_t baudrate = 115200; // 根据需要调整
