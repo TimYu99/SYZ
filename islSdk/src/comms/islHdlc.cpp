@@ -390,7 +390,9 @@ void IslHdlc::processPacket(const IslHdlcPacket& packet)
                 sendSFrame(IslHdlcPacket::SframeCode::Rr);
                 if ((m_pendingTxCount == 0 && m_iFramesSinceAckSent >= 8) || (m_isNrm && m_talkToken))
                 {
+
                     sendSFrame(IslHdlcPacket::SframeCode::Rr);
+                    
                     if (transmitFrame(&m_ctrlFrameBuf[0], m_ctrlFrameSize))
                     {
                         m_ctrlFrameSize = 0;
@@ -423,6 +425,7 @@ void IslHdlc::send(const uint8_t* data, uint_t size)
                 item->frame[2] = m_txSeq;
                 item->frame[3] = m_address;
                 Mem::memcpy(&item->frame[4], data, txSize);
+
                 m_txPacketQ.push();
                 m_txSeq++;
                 m_txMsgCount++;

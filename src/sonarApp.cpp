@@ -748,12 +748,15 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
         fprintf(outputFile, "Speed of Sound: %3f\n", iss360.settings.system.speedOfSound);
         fprintf(outputFile, "Tx Pulse Width (us): %f\n", iss360.settings.acoustic.txPulseWidthUs);
         fprintf(outputFile, "Tx Pulse Length (mm): %f\n", txPulseLengthMm);
-        fprintf(outputFile, "Data Count: %1f\n", ping.data.size());
+        fprintf(outputFile, "Data Count: %d\n", ping.data.size());
 
         // 写入 Beam Data
         fprintf(outputFile, "Beam Data: ");
+        int temp;
         for (int i = 0; i < temp_ping_.data_count; ++i) {
-            fprintf(outputFile, "%1f ", temp_ping_.beam_data[i]);
+            temp = static_cast<int>(temp_ping_.beam_data[i]);
+            // fprintf(outputFile, "%1f ", temp_ping_.beam_data[i]);
+            fprintf(outputFile, "%d ", temp); // 使用 %d 格式化输出整数
         }
         fprintf(outputFile, "\n");
 
