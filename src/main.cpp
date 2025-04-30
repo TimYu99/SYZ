@@ -87,6 +87,9 @@ Slot<SysPort&, AutoDiscovery::Type, uint_t, bool_t> slotPortDiscoveryFinished(&p
 Slot<SysPort&, const uint8_t*, uint_t> slotPortData(&portData);
 Slot<SysPort&> slotPortDeleted(&portDeleted);
 
+void COM1_reader();
+void COM2_reader();
+
 //--------------------------------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
@@ -116,29 +119,32 @@ int main(int argc, char** argv)
     int counts_gengxin = 0;
     int islDiscoveryCounter = 0; // 计数器用于控制 ISL 设备发现的频率
 
+    std::thread com1_reader_Thread(&COM1_reader);
+    com1_reader_Thread.detach();
+
+    std::thread com2_reader_Thread(&COM2_reader);
+    com2_reader_Thread.detach();
 
     while (1)
     {
-        Platform::sleepMs(40);
+        //Platform::sleepMs(40);
         //这里主要是计时输出串口大包信息
-        if (counts_jishu >= 10)
-        {
-            counts_jishu = 0;
-            if (sendBuffer[0] != '\0')
-
-            {
-                //serialPort.write(sendBuffer, 28, bytesWritten1);实验站时不注释，考古注释
-                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-            }
-        }
-        else
-        {
-            counts_jishu++;
-        }
+        //if (counts_jishu >= 10)
+        //{
+        //    counts_jishu = 0;
+        //    if (sendBuffer[0] != '\0')
+        //    {
+        //        //serialPort.write(sendBuffer, 28, bytesWritten1);实验站时不注释，考古注释
+        //        //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+        //    }
+        //}
+        //else
+        //{
+        //    counts_jishu++;
+        //}
         //if (counts_gengxin >= 10)
         //{
         //    counts_gengxin = 0;
-
         //    //sdk.ports.onNew.connect(slotNewPort);
         //    //std::cout << "已刷新: "  << std::endl;
         //}
@@ -146,11 +152,37 @@ int main(int argc, char** argv)
         //{
         //    counts_gengxin++;
         //}
-// 
 
+        sdk.run();                                                              // Run the SDK. This should be called regularly to process data
+
+        // 键盘事件，不过似乎这个并没有耗费多少时间
+        //if (Platform::keyboardPressed())                                        // Check if a key has been pressed and do some example tasks
+        //{
+        //    int_t key = Platform::getKey();
+
+        //    if (key == 'x')
+        //    {
+        //        break;
+        //    }
+        //    else
+        //    {
+        //        for (App* app : apps)
+        //        {
+        //            app->doTask(key, appPath);
+        //        }
+        //    }
+        //}
+    }
+    return 0;
+}
+//--------------------------------------------------------------------------------------------------
+void COM1_reader()
+{
+    while (1) {
+        // auto start_main = std::chrono::high_resolution_clock::now();
         serialPort.read(readBuffer1, sizeof(readBuffer1), bytesRead1);//处理实验站指令
-        if (bytesRead1 > 0)
-        {
+        
+        if (bytesRead1 > 0) {
             std::cout << "接收到外部串口数据: " << std::string(readBuffer1, bytesRead1) << std::endl;
             // 检查数据是否以 0x00 开头
             if (static_cast<unsigned char>(readBuffer1[0]) == 0x00) {
@@ -162,15 +194,25 @@ int main(int argc, char** argv)
 
             // serialPort.write(readBuffer1, bytesRead1, bytesWritten1);
         }
-        serialPort2.read(readBuffer2, sizeof(readBuffer2), bytesRead2);//处理DSP反馈给432的的FSKGOT指令
-        if (bytesRead2 > 0)
-        {
 
+        // auto end_main = std::chrono::high_resolution_clock::now();
+        // auto duration_main = std::chrono::duration_cast<std::chrono::milliseconds>(end_main - start_main).count();
+        // printf("line 152 serialPort.read took %lld ms\n", duration_main);
+    }
+}
+
+void COM2_reader()
+{
+    while (1) {
+        // auto start_main = std::chrono::high_resolution_clock::now();
+
+        serialPort2.read(readBuffer2, sizeof(readBuffer2), bytesRead2);//处理DSP反馈给432的的FSKGOT指令
+
+        if (bytesRead2 > 0) {
             std::string reply432read;
             //std::cout << "接收到432串口数据: " << std::string(readBuffer2, bytesRead2) << std::endl;
             reply432read = readBuffer2;
-            if (sizeof(reply432read) > 0 && reply432read[0] != '\0')
-            {
+            if (sizeof(reply432read) > 0 && reply432read[0] != '\0') {
                 std::cout << "接收到432串口数据: " << std::string(readBuffer2, bytesRead2) << std::endl;
                 saveData("D:/ceshi/Seriallog.txt", readBuffer2, strlen(readBuffer2), "COM2 Recieved", 0);
                 //if (reply432read.size() < 2 || reply432read.substr(reply432read.size() - 2) != "\r\n")
@@ -183,29 +225,11 @@ int main(int argc, char** argv)
             }
         }
 
-
-            // Sleep for 40ms to limit CPU usage
-            sdk.run();                                                              // Run the SDK. This should be called regularly to process data
-
-            if (Platform::keyboardPressed())                                        // Check if a key has been pressed and do some example tasks
-            {
-                int_t key = Platform::getKey();
-
-                if (key == 'x')
-                {
-                    break;
-                }
-                else
-                {
-                    for (App* app : apps)
-                    {
-                        app->doTask(key, appPath);
-                    }
-                }
-            }
-        }
-        return 0;
+        // auto end_main = std::chrono::high_resolution_clock::now();
+        // auto duration_main = std::chrono::duration_cast<std::chrono::milliseconds>(end_main - start_main).count();
+        // printf("line 175 serialPort2.read took %lld ms\n", duration_main);
     }
+}
 
 //--------------------------------------------------------------------------------------------------
 // This function is called when a new port is found. It's address has been initialised inside the slot class defined above.

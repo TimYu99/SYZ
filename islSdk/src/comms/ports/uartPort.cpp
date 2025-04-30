@@ -113,7 +113,7 @@ void UartPort::discoverIslDevices(uint16_t pid, uint16_t pn, uint16_t sn)
 {
     for (uint_t i = 0; i < defaultBaudrates.size(); i++)
     {
-        // 第一次发现设备的时候，对于每个波特率查找的次数；注意此查找次数，不适用于断线重连的查找次数
+        // 第一次发现设备的时候，对于每个波特率轮询的次数；注意此轮询次数，不适用于断线重连的轮询次数
         SysPort::discoverIslDevices(pid, pn, sn, ConnectionMeta(defaultBaudrates[i]), discoveryTimeoutMs, 1000);
     }
 }
