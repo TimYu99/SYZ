@@ -58,6 +58,7 @@ namespace IslSdk
         uint16_t checksum;
         uint8_t end1;
         uint8_t end2;
+        int m_sonar_app_index;
         void processReceivedData(const std::vector<uint8_t>& data);
         void SonarApp::readUartData(const std::string& portName, uint32_t baudrate);
         void initializeTime();

@@ -22,7 +22,8 @@ int count_60000_65535;
 
 int Accumulate;
 int thereold;
-char sendBuffer[256]="";
+char sendBuffer[256] = "";
+char sendBuffer2[256] = "";
 // 全局变量定义目标判别时的标志和初始化
 int flag_jingzhi = 0;   // 默认关闭
 int flag_yundong = 1;   // 默认关闭

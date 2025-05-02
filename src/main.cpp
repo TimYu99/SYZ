@@ -129,29 +129,28 @@ int main(int argc, char** argv)
     {
         //Platform::sleepMs(40);
         //这里主要是计时输出串口大包信息
-        //if (counts_jishu >= 10)
-        //{
-        //    counts_jishu = 0;
-        //    if (sendBuffer[0] != '\0')
-        //    {
-        //        //serialPort.write(sendBuffer, 28, bytesWritten1);实验站时不注释，考古注释
-        //        //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-        //    }
-        //}
-        //else
-        //{
-        //    counts_jishu++;
-        //}
-        //if (counts_gengxin >= 10)
-        //{
-        //    counts_gengxin = 0;
-        //    //sdk.ports.onNew.connect(slotNewPort);
-        //    //std::cout << "已刷新: "  << std::endl;
-        //}
-        //else
-        //{
-        //    counts_gengxin++;
-        //}
+        if (counts_jishu >= 10) {
+            counts_jishu = 0;
+            if (sendBuffer[0] != '\0') {
+                //serialPort.write(sendBuffer, 28, bytesWritten1);实验站时不注释，考古注释
+                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+            }
+            if (sendBuffer2[0] != '\0') {
+                //serialPort.write(sendBuffer2, 28, bytesWritten1);
+                //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
+            }
+        }
+        else {
+            counts_jishu++;
+        }
+        if (counts_gengxin >= 10) {
+            counts_gengxin = 0;
+            //sdk.ports.onNew.connect(slotNewPort);
+            //std::cout << "已刷新: "  << std::endl;
+        }
+        else {
+            counts_gengxin++;
+        }
 
         sdk.run();                                                              // Run the SDK. This should be called regularly to process data
 
@@ -579,6 +578,15 @@ void processSYZCommand(const std::string& command)
             memset(sendBuffer, 0, 256);
         }
 
+        if (sendBuffer2[0] == '\0') {
+            char sendBuffer1 [] = "No Sonar Message\r\n";
+            serialPort.write(sendBuffer1, 18, bytesWritten1);
+        }
+        else {
+            serialPort.write(sendBuffer2, 28, bytesWritten1);
+            memset(sendBuffer2, 0, 256);
+        }
+
     }
     else
     {
@@ -622,6 +630,6 @@ void sendToNextLevel(const std::string& portName, const std::string& message) {
     serialPort2.write(buffer, strlen(buffer), bytesWritten2);
     saveData("D:/ceshi/Seriallog.txt", buffer, strlen(buffer), "COM2 Send", 0);
     // 处理完后暂停1秒
-    //std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     //uartPort10_.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.size(), ConnectionMeta(115200));
 }

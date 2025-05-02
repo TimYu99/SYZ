@@ -2,6 +2,7 @@
 
 #include "sonarApp.h"
 #include "maths/maths.h"
+#include <cmath>
 #include "platform/debug.h"
 #include "files/bmpFile.h"
 #include "utils/utils.h"
@@ -32,6 +33,18 @@
 
 using namespace IslSdk;
 //后加
+
+struct model_param {
+    double mu;      // 均值
+    double sigma2;  // 方差
+    int t;          // 当前迭代了几帧
+};
+model_param model_array[101][200];
+int circle_times = 0;
+int flag_making_model = -1; // -1表示未建模，1表示建模中，0表示建模完成
+cv::Mat is_goal(101, 200, CV_8UC1, cv::Scalar(0)); // 目标图像
+int g_frame_count = 0;
+
 bool isRecording = false;
 std::string dataFolder_;  // 文件夹路径
 using namespace IslSdk;
@@ -89,6 +102,15 @@ int sec_mubao = 0;
 int chazhi_mubiao = 0;
 int biaozhi = 0;
 
+// 当前创建的 sonar app 编号
+static int sonar_app_index = 0;
+
+int convert_angle2index(int angle);
+double inverse_normal_cdf(double p);
+void recursive_update(model_param& params, double x, double learning_rate);
+bool detect_anomaly(const model_param& params, double current_value);
+void write_model_param(std::string file_path);
+double lognormalPDF(double x, double mu, double sigma);
 //void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height);
 
 std::string IslSdk::messageToString(const Message& msg)
@@ -255,7 +277,9 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
     reserved = 0;
     end1 = 0x0D;    // CR
     end2 = 0x0A;    // LF
-    
+    m_sonar_app_index = sonar_app_index;
+    sonar_app_index++;
+
     Debug::log(Debug::Severity::Notice, name.c_str(), "created" NEW_LINE
                                                         "d -> Set settings to defualt" NEW_LINE
                                                         "s -> Save settings to file" NEW_LINE
@@ -812,6 +836,23 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     uint32_t baudrate = 115200; // 根据需要调整
     sendFormattedData(portName, baudrate, year, month, day, hour, minute, second, status, angle, speed, minrange, maxrange);
 
+    static int send_count = 0;
+    send_count++;
+    if (send_count % 10 == 0) {
+        std::cout << "Send data count: " << send_count << std::endl;
+        int temp = 0;
+
+        if (m_sonar_app_index == 0) {
+            serialPort.write(sendBuffer, 28, temp);   // 实验站时不注释，考古注释
+            // saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+            send_count = 0;
+        }
+        else {
+            serialPort.write(sendBuffer2, 28, temp);   // 实验站时不注释，考古注释
+            // saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1);
+            send_count = 0;
+        }
+    }
 
 }
 
@@ -953,7 +994,12 @@ void SonarApp::sendFormattedData
     msg.end1 = 0x0D;
     msg.end2 = 0x0A;
     std::string messageStr = messageToString(msg);
-    memcpy(sendBuffer, messageStr.c_str(), 28);
+
+    if (m_sonar_app_index == 0)
+        memcpy(sendBuffer, messageStr.c_str(), 28);
+    else
+        memcpy(sendBuffer2, messageStr.c_str(), 28);
+
     memset(&msg, 0, sizeof(msg));
 }
 void SonarApp::saveShanxingToFile(const float* shanxing, int rows, int cols, const std::string& filename)
@@ -1040,6 +1086,20 @@ void SonarApp::saveShanxingToFile(const float* shanxing, int rows, int cols, con
 //    return;
 //}
 
+// 是否不使用帧差法，注释掉则使用帧差，否则使用背景建模法
+#define USE_NEW_ALGORITHM
+// 是否加载模型，如果不加载的话，将会自动创建模型，注释掉这个宏则不加载，每次训练
+// #define LOAD_MODEL
+// 模型迭代将在多少轮后降低学习率
+#define MAKE_MODEL_TIMES 3
+// 使用假设检验还是PDF概率密度分布函数判定，注释掉这个宏就会使用假设检验方法
+#define USE_PDF
+// 是否启用 debug 调试的图像显示和输出，实际部署的时候请将此宏设为0
+#define USE_IMSHOW 1
+// 是否根据距离动态调整阈值，防止目标过远，反射强度不够高，导致被误判为背景
+#define USE_DYNAMIC_THRESHOLD 0
+cv::Mat qiang_du_tu(101, 200, CV_8UC1, cv::Scalar(0));
+
 void SonarApp::consumePingData()
 {
 CONSUMER_START:
@@ -1050,10 +1110,200 @@ CONSUMER_START:
     pingQueue.pop(); // 移除队列前端的元素
     lock.unlock(); // 解锁互斥量
 
+#ifdef USE_NEW_ALGORITHM
+    int temp_qiangdutu_index = convert_angle2index(ping.angle);
+    for (int i = 0; i < ping.data.size(); i++) {
+        int temp = (double(ping.data[i]) / 65536.0 * 255.0);
+		qiang_du_tu.at<uchar>(temp_qiangdutu_index, i) = temp;
+    }
+
+    bool flag_have_goal = 0;
+// 图像显示 debug
+#if USE_IMSHOW == 1
+    cv::imshow("qiang_du_tu", qiang_du_tu);
+    cv::waitKey(1);
+    // 放大图像以便观看
+    cv::Mat qiang_du_tu_resized;
+    cv::resize(qiang_du_tu, qiang_du_tu_resized, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
+    cv::imshow("qiang_du_tu_resized", qiang_du_tu_resized);
+    cv::waitKey(1); // 等待 1 毫秒以更新窗口
+#endif
+    // 如果转完一圈了，统计转圈次数的计数器++；
+    if (ping.angle == 0) {
+        // 如果已经是检测阶段，或者缓慢学习阶段，显示图像
+        if (flag_making_model == 0 || flag_making_model == 2) {
+#if USE_IMSHOW == 1
+            cv::imshow("goal", is_goal);
+            cv::waitKey(1); // 等待 1 毫秒以更新窗口
+            cv::Mat is_goal_resized;
+            cv::resize(is_goal, is_goal_resized, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
+            cv::imshow("is_goal_resized", is_goal_resized);
+            cv::waitKey(1); // 等待 1 毫秒以更新窗口
+
+            // 开运算
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2)); // 定义核
+            cv::Mat result;
+            cv::morphologyEx(is_goal, result, cv::MORPH_OPEN, kernel); // 开运算
+            cv::imshow("After Opening", result);
+            cv::waitKey(1);
+
+            // 遍历图像，看还有没有白色的点，有则认为是目标
+            int temp_have_goal = 0;
+            for (int i = 0; i < 101; i++)
+                for (int j = 0; j < 200; j++) {
+                    if (is_goal.at<uchar>(i, j) == 255) {
+                        temp_have_goal = 1;
+                        // 是目标的操作，i是角度数，j是距离值
+                        // < 50 是 270~360 >50 是 0~90
+                        // temp_angle 里面放的就是还原后的实际角度
+                        int temp_angle = (i < 50) ? ((i * 64 + 9600.00) / 35.5) : ((i - 50) * 64.0 / 35.5);
+                    }
+                }
+   //         if (temp_have_goal == 1)
+   //             flag_have_goal = 1;
+			//else
+			//	flag_have_goal = 0;
+
+            // 画出最大判别强度图
+            cv::Mat zui_da_qiang_du_tu(101, 200, CV_8UC1, cv::Scalar(0));
+            for (int i = 0; i < 101; i++)
+                for (int j = 0; j < 200; j++) {
+                    double temp_sigma = std::sqrt(model_array[i][j].sigma2); // 标准差
+                    double temp = std::exp(model_array[i][j].mu + 2.5 * temp_sigma);
+                    temp = (temp > 65535) ? 65535 : temp;
+                    temp /= 65535.0;
+                    temp *= 255.0;
+                    int temp2 = static_cast<int>(temp);
+                    zui_da_qiang_du_tu.at<uchar>(i, j) = temp2;
+                }
+            cv::imshow("zui_da_qiang_du_tu", zui_da_qiang_du_tu);
+            cv::waitKey(1);
+
+            cv::Mat zui_da_qiang_du_tu4x;
+            cv::resize(zui_da_qiang_du_tu, zui_da_qiang_du_tu4x, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
+            cv::imshow("zui_da_qiang_du_tu4x", zui_da_qiang_du_tu4x);
+            cv::waitKey(1); // 等待 1 毫秒以更新窗口
+#endif
+        }
+        circle_times++;
+        std::cout << "circle_times = " << circle_times << std::endl;
+        
+#ifndef LOAD_MODEL
+        // 保存每一轮的模型参数
+        if (circle_times <= MAKE_MODEL_TIMES + 1)
+            write_model_param("model_" + std::to_string(circle_times) + ".txt");
+#endif
+
+        // 对齐零点
+        if (flag_making_model == -1)
+            flag_making_model = 1; // 如果是第一次转圈，开始建模
+    }
+
+    // 如果转了20圈，认为模型已经收敛，取消建模，进入预测状态
+    if (circle_times == MAKE_MODEL_TIMES) {
+        flag_making_model = 2; // 进入缓慢学习阶段
+    }
+
+    // 如果当前正在建模
+    if (flag_making_model == 1 || flag_making_model == 2) {
+#ifdef LOAD_MODEL
+        std::fstream in("model_11.txt", std::ios::in); // 打开文件以读取
+        if (!in) {
+            std::cerr << "Error opening file for reading." << std::endl;
+            return;
+        }
+        // 读取模型参数
+        for (auto& i : model_array) {
+            for (auto& j : i) {
+                in >> j.mu >> j.sigma2;
+            }
+        }
+        in.close(); // 关闭文件
+        flag_making_model = 0;
+#else
+        // 如果是第一次转圈，直接取其值作为均值，方差赋值为0.1
+        if (circle_times == 1) {
+            int temp_index = convert_angle2index(ping.angle);
+            for (int i = 0; i < ping.data.size(); i++) {
+                model_array[temp_index][i].mu = std::log(ping.data[i]);
+                model_array[temp_index][i].sigma2 = 0.1;
+                model_array[temp_index][i].t = 1;
+            }
+        }
+        else { // 否则，迭代建模
+            // 并且，处于步长为 1.8 的状态下，这个是避免声呐莫名其妙扫描值变成 0.9 的情况
+            if (ping.stepSize == 64) {
+                #if USE_IMSHOW == 1
+                std::cout << "angle = " << ping.angle << "\n";
+                #endif
+                int temp_index = convert_angle2index(ping.angle);
+                #if USE_IMSHOW == 1
+                std::cout << "temp_index = " << temp_index << "\n";
+                #endif
+
+                // 如果当前没有目标，那么遍历当前角度下的每一个距离，进行迭代更新，有目标就不学习了
+                //if (flag_have_goal == 0)
+                for (int i = 0; i < ping.data.size(); i++)
+                    // recursive_update(model_array[temp_index][i], ping.data[i], (flag_making_model == 1) ? 0.5 : 0.2);
+                    recursive_update(model_array[temp_index][i], ping.data[i], 0.5);
+                //else
+                //    printf("[DEBUG]: There is a target, do not update the model!!!!!!!\n");
+            }
+            else
+                std::cout << "[ERROR]: Step size is " << ping.stepSize << std::endl;
+        }
+#endif
+    }
+
+    // 如果是缓慢建图阶段或者检测阶段，进行目标检测
+    if (flag_making_model == 0 || flag_making_model == 2) {
+        if (ping.stepSize == 64) {
+            int temp_index = convert_angle2index(ping.angle);
+
+            int temp_flag = 0;
+
+            for (int i = 10; i < ping.data.size(); i++) {
+                temp_flag = 0;
+#ifndef USE_PDF
+                temp_flag = detect_anomaly(model_array[temp_index][i], ping.data[i]);
+#else
+                // 比原来小，不管它
+                if (std::log(ping.data[i]) < model_array[temp_index][i].mu)
+                    continue;
+
+                double temp_p = lognormalPDF(ping.data[i], model_array[temp_index][i].mu, model_array[temp_index][i].sigma2);
+                double temp_sigma = std::sqrt(model_array[temp_index][i].sigma2);
+#if USE_DYNAMIC_THRESHOLD == 1
+                double max_value = std::exp(model_array[temp_index][i].mu + (5.5 + (-2 / 190.0) * i)* temp_sigma);
+#else
+                double max_value = std::exp(model_array[temp_index][i].mu + 2.5 * temp_sigma);
+#endif
+                max_value < 0 ? max_value = 0 : 65536;
+                max_value > 65535 ? max_value = 65535 : max_value;
+                double p_min = lognormalPDF(max_value, model_array[temp_index][i].mu, model_array[temp_index][i].sigma2);
+
+                if (temp_p < p_min) {
+                    temp_flag = 1;
+                    printf("[DEBUG]:value: %d, upper: %f, mu: %f, f(x): %f, f(mu+sigma): %f\n", ping.data[i], max_value, std::exp(model_array[temp_index][i].mu), temp_p, p_min);
+                }
+#endif
+                is_goal.at<uchar>(temp_index, i) = (temp_flag == 0) ? 0 : 255; // 0表示无目标，1表示有目标
+                //if (temp_flag == 1)
+                //    printf("[GOAL]: value = %d, mu = %f, sigma2 = %f\n", (int) ping.data[i], model_array[temp_index][i].mu, model_array[temp_index][i].sigma2);
+            }
+        }
+        else
+            std::cout << "[ERROR]: Step size is not 1.8, please check!" << std::endl;
+    }
+    
+    flag_shanxing = 0;
+#endif
+
     // 处理 pingData
     uint_t txPulseLengthMm = static_cast<uint_t>((*m_piss360).settings.system.speedOfSound * (*m_piss360).settings.acoustic.txPulseWidthUs * 0.001 * 0.5);
     txPulseLengthMm = Math::max<uint_t>(txPulseLengthMm, 150);
     recordPingData(*m_piss360, ping, txPulseLengthMm);
+
 
     if (flag_shanxing == 1) {
         jishu_shanxing = jishu_shanxing + 1;
@@ -1325,4 +1575,159 @@ void SonarApp::saveImageWithTimestamp_beijing(const cv::Mat& image)
     else {
         std::cerr << "保存图像失败!" << std::endl;
     }
+}
+
+// 递归更新对数正态分布参数
+void recursive_update(model_param& params, double x, double learning_rate)
+{
+    // 计算当前观测值的对数
+    double y = log(x);
+
+    // 增加帧计数器
+    params.t += 1;
+
+    // 动态调整学习率
+    // double learning_rate = 0.5; // 学习率随迭代次数减小
+
+    // 更新均值
+    double delta = y - params.mu;
+    params.mu += learning_rate * delta / params.t;
+
+    // 更新方差
+    double delta2 = (y - params.mu) * delta; // 使用 delta 避免重复计算
+    params.sigma2 += learning_rate * (delta2 - params.sigma2) / params.t;
+}
+
+// 检测是否存在异常值
+bool detect_anomaly(const model_param& params, double current_value)
+{
+    double alpha = 0.001; // 显著性水平
+
+    // 从方差计算标准差
+    double sigma = std::sqrt(params.sigma2);
+
+    // 计算上下限
+    double z = inverse_normal_cdf(1 - alpha / 2); // 显著性水平对应的z值
+    double lower_limit = std::exp(params.mu - z * sigma);
+    double upper_limit = std::exp(params.mu + z * sigma);
+
+    // 正常的假设检验，应该是判断两边是否超限，但是这个场景下只需要判断是否比上限大就好了
+    // bool flag = current_value < lower_limit || current_value > upper_limit;
+    bool flag = current_value > upper_limit;
+
+#if USE_IMSHOW == 1
+    if (flag == 1)
+        printf("[DEBUG]: mu: %f, sigma: %f, lower_limit: %f, upper_limit: %f, current_value: %f\n", std::exp(params.mu), params.sigma2, lower_limit, upper_limit, current_value);
+#endif
+    return flag;
+}
+
+int convert_angle2index(int angle)
+{
+    // 映射当前角度; 270~360 -> 0~50; 0~90 -> 51~100
+    int temp_index = 0;
+
+    // 偶尔会有超出限制的
+    if (angle > 9000 && angle < 9600)
+        angle = 9600;
+
+    if (angle > 3200 && angle < 4000)
+        angle = 3200;
+
+    // 角度映射
+    if (angle >= 9600 && angle <= 12800)
+        temp_index = (angle - 9600) / 64;
+    else
+        temp_index = angle / 64 + 50;
+    
+    return temp_index;
+}
+
+// 近似实现标准正态分布的逆累积分布函数（Phi^-1）
+double inverse_normal_cdf(double p)
+{
+    // Abramowitz and Stegun's approximation for the inverse normal CDF
+    if (p <= 0.0 || p >= 1.0) {
+        throw std::invalid_argument("p must be in the range (0, 1)");
+    }
+
+    const double a1 = -3.969683028665376e+01;
+    const double a2 = 2.209460984245205e+02;
+    const double a3 = -2.759285104469687e+02;
+    const double a4 = 1.383577518672690e+02;
+    const double a5 = -3.066479806614716e+01;
+    const double a6 = 2.506628277459239e+00;
+
+    const double b1 = -5.447609879822406e+01;
+    const double b2 = 1.615858368580409e+02;
+    const double b3 = -1.556989798598866e+02;
+    const double b4 = 6.680131188771972e+01;
+    const double b5 = -1.328068155288572e+01;
+
+    const double c1 = -7.784894002430293e-03;
+    const double c2 = -3.223964580411365e-01;
+    const double c3 = -2.400758277161838e+00;
+    const double c4 = -2.549732539343734e+00;
+    const double c5 = 4.374664141464968e+00;
+    const double c6 = 2.938163982698783e+00;
+
+    const double d1 = 7.784695709041462e-03;
+    const double d2 = 3.224671290700398e-01;
+    const double d3 = 2.445134137142996e+00;
+    const double d4 = 3.754408661907416e+00;
+
+    const double p_low = 0.02425;
+    const double p_high = 1.0 - p_low;
+
+    double q, r, result;
+
+    if (p < p_low) {
+        // Rational approximation for lower region
+        q = std::sqrt(-2 * std::log(p));
+        result = (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+    }
+    else if (p <= p_high) {
+        // Rational approximation for central region
+        q = p - 0.5;
+        r = q * q;
+        result = (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+            (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1);
+    }
+    else {
+        // Rational approximation for upper region
+        q = std::sqrt(-2 * std::log(1 - p));
+        result = -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+    }
+
+    return result;
+}
+
+void write_model_param(std::string file_path)
+{
+    std::ofstream out(file_path, std::ios::out); // 打开文件以
+    for (auto& i : model_array) {
+        for (auto& j : i) {
+            out << j.mu << " " << j.sigma2 << "\n";
+        }
+    }
+    out.close();
+    return;
+}
+
+// 函数：计算对数正态分布的概率密度值
+double lognormalPDF(double x, double mu, double variance)
+{
+    if (x <= 0) {
+        // 对数正态分布定义域为 x > 0
+        return 0.0;
+    }
+    // 根据方差计算标准差
+    double sigma = std::sqrt(variance);
+
+    // 对数正态分布的概率密度函数公式
+    double exponent = -(std::pow(std::log(x) - mu, 2)) / (2 * std::pow(sigma, 2));
+    double denominator = x * sigma * std::sqrt(2 * 3.141592653); // 2 * pi
+    return std::exp(exponent) / denominator;
 }
