@@ -44,7 +44,8 @@ std::shared_ptr<GpsApp> gpsApp;
 //=============================额外串口通信参数设置======================
 SeriallPort serialPort;//串口1
 SeriallPort serialPort2;//串口2
-
+char sonar1[] = "sonar1 \r\n";
+char sonar2[] = "sonar2 \r\n";
 char readBuffer1[256];//串口1，与实验站建立的串口信息的数组设置，115200波特率，COM1，默认对于规定的实验站协议，与实验站传递的串口大包数据的数组设置，
 int bytesRead1;//
 int bytesWritten1;
@@ -129,28 +130,52 @@ int main(int argc, char** argv)
     {
         //Platform::sleepMs(40);
         //这里主要是计时输出串口大包信息
-        if (counts_jishu >= 10) {
-            counts_jishu = 0;
-            if (sendBuffer[0] != '\0') {
-                //serialPort.write(sendBuffer, 28, bytesWritten1);实验站时不注释，考古注释
-                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-            }
-            if (sendBuffer2[0] != '\0') {
-                //serialPort.write(sendBuffer2, 28, bytesWritten1);
-                //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
-            }
-        }
-        else {
-            counts_jishu++;
-        }
-        if (counts_gengxin >= 10) {
-            counts_gengxin = 0;
-            //sdk.ports.onNew.connect(slotNewPort);
-            //std::cout << "已刷新: "  << std::endl;
-        }
-        else {
-            counts_gengxin++;
-        }
+        //if (counts_jishu >= 10) {
+        //    counts_jishu = 0;
+        //    if (globalstatus1 == 0x03)
+        //    {
+        //        if (sendBuffer[0] != '\0') {
+        //            serialPort.write(sendBuffer, 28, bytesWritten1);//实验站时不注释，考古注释
+        //            //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+        //        }
+        //        if (sendBuffer2[0] != '\0') {
+        //            serialPort.write("\n", 1, bytesWritten1);
+        //            serialPort.write(sendBuffer2, 28, bytesWritten1);
+        //            //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
+        //        }
+        //    }
+        //    else
+        //    {
+        //        if (globalPn == 2255 && globalSn == 24)
+        //        {
+        //            if (sendBuffer[0] != '\0') {
+        //                serialPort.write(sendBuffer, 28, bytesWritten1);//实验站时不注释，考古注释
+        //                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+        //            }
+        //        }
+        //        if (globalPn == 2254 && globalSn == 25)
+        //        {
+        //            if (sendBuffer2[0] != '\0') {
+        //                serialPort.write(sendBuffer2, 28, bytesWritten1);
+        //                //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
+        //            }
+        //        }
+
+        //    
+        //    }
+        //   
+        //}
+        //else {
+        //    counts_jishu++;
+        //}
+        //if (counts_gengxin >= 10) {
+        //    counts_gengxin = 0;
+        //    //sdk.ports.onNew.connect(slotNewPort);
+        //    //std::cout << "已刷新: "  << std::endl;
+        //}
+        //else {
+        //    counts_gengxin++;
+        //}
 
         sdk.run();                                                              // Run the SDK. This should be called regularly to process data
 
@@ -311,6 +336,25 @@ void newDevice(const Device::SharedPtr& device, const SysPort::SharedPtr& sysPor
         sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = 1;
         sonar_working_flag = 1;
         printf("%s 设备的状态：%d\n", StringUtils::pnSnToStr(device->info.pn, device->info.sn).c_str(), sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)]);
+
+        if (sonar_status["2255.0024"] == 1 && sonar_status["2254.0025"] == 1)
+        {
+            globalstatus1 = 0x03;
+            globalstatus2 = 0x03;// 设成默认值
+        }
+        else 
+        {
+            if (sonar_status["2254.0025"] == 1)
+            {
+                globalstatus2 = 0x02; // 设成默认值
+                saveData("D:/ceshi/Seriallog.txt", sonar2, strlen(sonar2), "Work:", 0);
+            }
+            if (sonar_status["2255.0024"] == 1)
+            {
+                globalstatus1 = 0x01; // 设成默认值
+                saveData("D:/ceshi/Seriallog.txt", sonar1, strlen(sonar1), "Work:", 0);
+            }
+        }
         printf("是否有设备在工作：%d\n", sonar_working_flag);
         // 断线重连次数清零
         sonar_reconnect_count[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = 0;
@@ -416,6 +460,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ON,0*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,OFF,0") != std::string::npos) {
         reply = "$SMSN,OFOK,1*";
@@ -424,15 +469,20 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,OFF,0*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        smsn1_on_flag = 0;
+        smsn2_on_flag = 0;
     }
-    //else if (command.find("$SMSN,ONONE,1") != std::string::npos) {
-    //    reply = "$SMSN,ONOK,1*";
-    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
-    //    sendReply("COM6", reply);
-    //    reply432 = "$SMSN,ONONE,1*";
-    //    reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
-    //    sendToNextLevel("COM10", reply432);
-    //}
+    else if (command.find("$SMSN,ONONE,1") != std::string::npos) {
+        reply = "$SMSN,ONOK,1*";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
+        sendReply("COM6", reply);
+        reply432 = "$SMSN,ONONE,1*";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
+        sendToNextLevel("COM10", reply432);
+        smsn1_on_flag = 1;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
     else if (command.find("$SMSN,OFONE,1") != std::string::npos) {
         reply = "$SMSN,ONNO,1*";
         reply += SeriallPort::calculateChecksum(reply) + "\r\n";
@@ -440,15 +490,18 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,OFONE,1*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        smsn1_on_flag = 0;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    //else if (command.find("$SMSN,ONTWO,2") != std::string::npos) {
-    //    reply = "$SMSN,ONOK,2*";
-    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
-    //    sendReply("COM6", reply);
-    //    reply432 = "$SMSN,ONTWO,2*";
-    //    reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
-    //    sendToNextLevel("COM10", reply432);
-    //}
+    else if (command.find("$SMSN,ONTWO,2") != std::string::npos) {
+        reply = "$SMSN,ONOK,2*";
+        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
+        sendReply("COM6", reply);
+        reply432 = "$SMSN,ONTWO,2*";
+        reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
+        smsn2_on_flag = 1;
+        sendToNextLevel("COM10", reply432);
+    }
     else if (command.find("$SMSN,OFTWO,2") != std::string::npos) {
         reply = "$SMSN,ONNO,2*";
         reply += SeriallPort::calculateChecksum(reply) + "\r\n";
@@ -456,6 +509,8 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,OFTWO,2*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        smsn2_on_flag = 0;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL1,1") != std::string::npos) {
         reply = "$SMSN,ZL1,0*";
@@ -464,6 +519,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL1,1*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL2,1") != std::string::npos) {
         reply = "$SMSN,ZL2,0*";
@@ -473,6 +529,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL2,1*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL3,1") != std::string::npos) {
         reply = "$SMSN,ZL3,0*";
@@ -481,6 +538,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL3,1*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL1,2") != std::string::npos) {
         reply = "$SMSN,ZL1,0*";
@@ -489,6 +547,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL1,2*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL2,2") != std::string::npos) {
         reply = "$SMSN,ZL2,0*";
@@ -497,6 +556,7 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL2,2*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     else if (command.find("$SMSN,ZL3,2") != std::string::npos)
     {
@@ -506,27 +566,30 @@ void processSYZCommand(const std::string& command)
         reply432 = "$SMSN,ZL3,2*";
         reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
         sendToNextLevel("COM10", reply432);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    else if (command.find("$SMSN,ONONE,1") != std::string::npos) //由$SMSN,ONONE,1替代$SMSN,SONAR,1
-    {
-        reply = "$SMSN,ONOK,1*";
-        //reply = "$SMSN,WORK,1*";
-        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
-        sendReply("COM6", reply);
-        reply432 = "$SMSN,SONAR,1*CK\r\n";
-        //reply432 +=  "\r\n";
-        sendToNextLevel("COM10", reply432);
-    }
-    else if (command.find("$SMSN,ONTWO,2") != std::string::npos)//由$SMSN,ONTWO,2替代$SMSN,SONAR,2
-    {
-        reply = "$SMSN,WORK,2*";
-        //reply = "$SMSN,WORK,2*";
-        reply += SeriallPort::calculateChecksum(reply) + "\r\n";
-        sendReply("COM6", reply);
-        reply432 = "$SMSN,SONAR,2*CK\r\n";
-        //reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
-        sendToNextLevel("COM10", reply432);
-    }
+    //else if (command.find("$SMSN,ONONE,1") != std::string::npos) //由$SMSN,ONONE,1替代$SMSN,SONAR,1
+    //{
+    //    reply = "$SMSN,ONOK,1*";
+    //    //reply = "$SMSN,WORK,1*";
+    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
+    //    sendReply("COM6", reply);
+    //    reply432 = "$SMSN,SONAR,1*CK\r\n";
+    //    //reply432 +=  "\r\n";
+    //    sendToNextLevel("COM10", reply432);
+    //    std::this_thread::sleep_for(std::chrono::seconds(1));
+    //}
+    //else if (command.find("$SMSN,ONTWO,2") != std::string::npos)//由$SMSN,ONTWO,2替代$SMSN,SONAR,2
+    //{
+    //    reply = "$SMSN,WORK,2*";
+    //    //reply = "$SMSN,WORK,2*";
+    //    reply += SeriallPort::calculateChecksum(reply) + "\r\n";
+    //    sendReply("COM6", reply);
+    //    reply432 = "$SMSN,SONAR,2*CK\r\n";
+    //    //reply432 += SeriallPort::calculateChecksum(reply432) + "\r\n";
+    //    sendToNextLevel("COM10", reply432);
+    //    std::this_thread::sleep_for(std::chrono::seconds(1));
+    //}
     else if (command.find("$SMSN,CYCLE") != std::string::npos) //$SMSN,CYCLE,XXXX,XXXX,0*CK
     {
         std::regex regexPattern(R"(\$SMSN,CYCLE,(\d+),(\d+),0\*CK)");
@@ -569,7 +632,7 @@ void processSYZCommand(const std::string& command)
 
         if (sendBuffer[0] == '\0')
         {
-            char sendBuffer1[] = "No Sonar Message\r\n";
+            char sendBuffer1[] = "No Sonar Message1\r\n";
             serialPort.write(sendBuffer1, 18, bytesWritten1);
         }
         else
@@ -579,7 +642,7 @@ void processSYZCommand(const std::string& command)
         }
 
         if (sendBuffer2[0] == '\0') {
-            char sendBuffer1 [] = "No Sonar Message\r\n";
+            char sendBuffer1 [] = "No Sonar Message2\r\n";
             serialPort.write(sendBuffer1, 18, bytesWritten1);
         }
         else {

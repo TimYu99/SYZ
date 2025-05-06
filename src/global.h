@@ -6,7 +6,10 @@
 // 定义全局变量
 extern uint16_t globalPn;
 extern uint16_t globalSn;
-extern uint8_t globalstatus;
+extern uint8_t globalstatus1;
+extern uint8_t globalstatus2;
+extern int smsn1_on_flag;
+extern int smsn2_on_flag;
 extern uint16_t globalangle;
 extern uint8_t globalspeed;
 extern uint8_t globalminrange;

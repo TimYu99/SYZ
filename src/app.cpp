@@ -9,8 +9,8 @@
 #include <string>
 
 using namespace IslSdk;
-char sonar1[] = "sonar1 \r\n";
-char sonar2 [] = "sonar2 \r\n";
+//char sonar1[] = "sonar1 \r\n";
+//char sonar2 [] = "sonar2 \r\n";
 
 // 每一个声呐的工作状态；1：正常工作；0：断线重连中；
 extern std::map < std::string, int > sonar_status;
@@ -22,6 +22,7 @@ extern bool sonar_working_flag;
 //--------------------------------------------------------------------------------------------------
 App::App(const std::string& name) : name(name), m_device(nullptr)
 {
+
 }
 //--------------------------------------------------------------------------------------------------
 App::~App()
@@ -91,20 +92,37 @@ void App::callbackConnect(Device& device)
     // 保存设备信息到全局变量
     globalPn = device.info.pn;
     globalSn = device.info.sn;
-    if (globalPn == 2255 && globalSn == 10)
-    {
-        globalstatus = 0x02; // 设置 Bit1 为 1
+  
+    // if((sonar_status.size()==2)&& smsn2_on_flag==1&&smsn1_on_flag==1)
+    // {
+    //     globalstatus1= 0x03; // 设置 Bit1 为 1
+    //     globalstatus2 = 0x03;
+    //     printf("声呐1和声呐2都连接\n");
 
-        saveData("D:/ceshi/Seriallog.txt", sonar2, strlen(sonar2), "Work:", 0);
-    }
-    else if (globalPn == 2254 && globalSn == 25)
-    {
-        globalstatus = 0x01; // 设置 Bit0 为 1
-        saveData("D:/ceshi/Seriallog.txt", sonar1, strlen(sonar1), "Work:", 0);
-    }
-    else {
-        globalstatus = 0x00; // 设成默认值
-    }
+    // }
+    // else
+    // {
+    //       if (globalPn == 2254 && globalSn == 25)//globalPn == 2255 && globalSn == 10
+    //       {
+    //        globalstatus2 = 0x02; // 设置 Bit1 为 1
+    //        printf("声呐2连接\n");
+            //saveData("D:/ceshi/Seriallog.txt", sonar2, strlen(sonar2), "Work:", 0);
+    //}
+    //else {
+    //    globalstatus2 = 0x00; // 设成默认值
+    //    printf("声呐2未连接\n");
+    //}
+    // if (globalPn == 2255 && globalSn == 24)
+    //{
+    //    globalstatus1 = 0x01; // 设置 Bit0 为 1
+    //    printf("声呐1连接\n");
+    //    saveData("D:/ceshi/Seriallog.txt", sonar1, strlen(sonar1), "Work:", 0);
+    //}
+    //else {
+    //    globalstatus1 = 0x00; // 设成默认值
+    //    printf("声呐1未连接\n");
+    //}
+    // }
     connectEvent(device);
 }
 //--------------------------------------------------------------------------------------------------
@@ -120,7 +138,19 @@ void App::callbackDisconnect(Device& device)
     }
     sonar_working_flag = temp_flag;
     printf("是否有设备在工作：%d\n", sonar_working_flag);
-
+   
+    if (sonar_status["2255.0024"] == 0&& sonar_status["2254.0025"] == 0)
+    {
+        globalstatus1 = 0x00; // 设成默认值
+        
+    }
+  
+    if (sonar_status["2254.0025"] == 0)
+    {
+         // 设成默认值
+        globalstatus2 = 0x00;
+    }
+    
     Debug::log(Debug::Severity::Notice, name.c_str(), "%04u.%04u disconnected", device.info.pn, device.info.sn);
 }
 //--------------------------------------------------------------------------------------------------

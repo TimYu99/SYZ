@@ -36,7 +36,7 @@ void IslDeviceDiscovery::sendToNextLevel(const std::string& portName, const std:
     uint32_t baudrate = 115200;  // 根据需要调整波特率
     const char* buffer = message.c_str();
     serialPort2.write(buffer, strlen(buffer), isl_device_discovery_bytes_written);
-    saveData("D:/ceshi/Seriallog.txt", buffer, strlen(buffer), "COM2 Send", 0);
+    saveData("D:/ceshi/Seriallog.txt", buffer, strlen(buffer), "System Wrong", 0);
     // 处理完后暂停1秒
     //std::this_thread::sleep_for(std::chrono::seconds(1));
     //uartPort10_.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.size(), ConnectionMeta(115200));
@@ -83,21 +83,39 @@ bool_t IslDeviceDiscovery::run()
                     for (auto& it : sonar_port_name) {
                         // 如果当前没有任何一个在工作，那么增加各个设备的超时轮询
                         // 如果有设备在工作，就不增加任何设备的超时轮询，因为在交替工作
-                        if (sonar_working_flag == false) {
+                        if (sonar_working_flag == false) 
+                        {
                             // 给串口对应的设备增加超时轮询
                             if (std::string(m_sysPort.name.c_str()) == it.second) {
                                 sonar_reconnect_count[it.first]++;
                                 printf("%s 设备增加超时轮询次数：%d\n", it.first.c_str(), sonar_reconnect_count[it.first]);
 
-                                // 断线之后多少次了，通知单片机
-                                if (sonar_reconnect_count[it.first] == 10000) {
-                                    if (it.first == "2255.0025") {
+                                // 声呐1断线之后多少次了，通知单片机
+                                if (sonar_reconnect_count[it.first] == 10000) 
+                                {
+                                    // 声呐1断线之后多少次了，通知单片机
+                                    if (it.first == "2255.0024") {
                                         std::string temp_send_string;
-                                        temp_send_string = "$SMSN,OFTWO,2*";
+                                        temp_send_string = "$SMSN,OFF,0*";
+                                        temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
+                                        sendToNextLevel("COM10", temp_send_string);
+                                        temp_send_string = "$SMSN,ONTWO,2*";
+                                        temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
+                                        sendToNextLevel("COM10", temp_send_string);
+                                    }
+                                    // 声呐2断线之后多少次了，通知单片机
+                                    if (it.first == "2254.0025") {
+                                        std::string temp_send_string;
+                                        temp_send_string = "$SMSN,OFF,0*";
+                                        temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
+                                        sendToNextLevel("COM10", temp_send_string);
+                                        temp_send_string = "$SMSN,ONONE,1*";
                                         temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                                         sendToNextLevel("COM10", temp_send_string);
                                     }
                                 }
+                                
+
                             }
                         }
                     }
@@ -113,12 +131,16 @@ bool_t IslDeviceDiscovery::run()
                     if (std::string(m_sysPort.name.c_str()) == "COM3" && sonar1_first_connect_search_count == 60) {
                             printf("声呐第一次连接彻底超时！！发送给单片机！\n");
                             std::string temp_send_string;
-                            temp_send_string = "$SMSN,TWO,2*";
+                            temp_send_string = "$SMSN,OFF,0*";
+                            temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
+                            sendToNextLevel("COM10", temp_send_string);
+                            temp_send_string = "$SMSN,ONTWO,2*";
                             temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                             sendToNextLevel("COM10", temp_send_string);
                     }
 
-                    if (std::string(m_sysPort.name.c_str()) == "COM4") {
+                    if (std::string(m_sysPort.name.c_str()) == "COM4")
+                    {
                         printf("声呐2第一次连接的超时判断++：%d\n", sonar2_first_connect_search_count);
                         sonar2_first_connect_search_count++;
                     }

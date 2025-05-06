@@ -5,7 +5,8 @@
 // 全局变量定义
 uint16_t globalPn = 0;
 uint16_t globalSn = 0;
-uint8_t globalstatus = 0x00;
+uint8_t globalstatus1 = 0x00;
+uint8_t globalstatus2 = 0x00;
 uint16_t globalangle = 0;
 uint8_t globalspeed = 0;
 uint8_t globalminrange = 0;
@@ -31,6 +32,8 @@ int flag_shanxing = 0;   // 默认关闭
 int flag_target = 0;     // 默认未检测到目标
 int flag_zhiling = 1;    // 默认未执行指令
 int flag_beijing = 0;    // 默认未执行指令
+int smsn1_on_flag = 0;
+int smsn2_on_flag = 0;
 //计数器
 int jishu_shanxing =0;
 int jishu_guding=0;

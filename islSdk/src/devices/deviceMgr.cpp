@@ -9,6 +9,7 @@
 #include "multiPcp.h"
 #include "platform/timeUtils.h"
 #include "platform/debug.h"
+#include "global.h"
 
 using namespace IslSdk;
 
@@ -195,6 +196,9 @@ Device::SharedPtr DeviceMgr::createDevice(const Device::Info& deviceInfo)
     if (device)
     {
         debugLog("Device", "New Device %04u.%04u", deviceInfo.pn, deviceInfo.sn);
+        // 保存设备信息到全局变量
+        globalPn = deviceInfo.pn;
+        globalSn = deviceInfo.sn;
         device->setCommsTimeout(m_hostCommsTimeoutMs);
         device->m_packetResendLimit = m_txRetries;
         device->m_deviceTimeOut = m_deviceCommsTimeoutMs;

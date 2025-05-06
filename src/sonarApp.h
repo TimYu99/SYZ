@@ -19,6 +19,12 @@
 
 namespace IslSdk
 {
+    struct model_param {
+        double mu;      // 均值
+        double sigma2;  // 方差
+        int t;          // 当前迭代了几帧
+    };
+
     struct Message {
         char header[7];
         uint16_t length;
@@ -59,10 +65,28 @@ namespace IslSdk
         uint8_t end1;
         uint8_t end2;
         int m_sonar_app_index;
+
+        // 新算法所需
+        model_param model_array[101][200];//1、这里得改，2、角度映射，前面的
+        int circle_times = 0;
+        int flag_making_model = -1; // -1表示未建模，1表示建模中，0表示建模完成
+        int g_frame_count = 0;
+        cv::Mat qiang_du_tu;
+        cv::Mat is_goal; // 目标图像
+
+
         void processReceivedData(const std::vector<uint8_t>& data);
         void SonarApp::readUartData(const std::string& portName, uint32_t baudrate);
         void initializeTime();
         uint16_t addcalculateChecksum(const uint8_t* data, size_t size);
+
+        int convert_angle2index(int angle);
+        double inverse_normal_cdf(double p);
+        void recursive_update(model_param& params, double x, double learning_rate);
+        bool detect_anomaly(const model_param& params, double current_value);
+        void write_model_param(std::string file_path);
+        double lognormalPDF(double x, double mu, double sigma);
+
         void SonarApp::sendFormattedData
         (
             const std::string& portName,
