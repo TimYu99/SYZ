@@ -126,6 +126,7 @@ namespace IslSdk
         void writeInitialLog();
         void SonarApp::recordPingData(const Sonar& iss360, const Sonar::Ping& ping, uint_t txPulseLengthMm);
         void saveImageWithTimestamp_beijing(const cv::Mat& image);
+        void saveImageWithTimestamp_mubiao(const cv::Mat& image);
         
         #define MAX_QUEUE_SIZE 1000
         std::queue <Sonar::Ping> pingQueue;

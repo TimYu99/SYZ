@@ -1303,14 +1303,14 @@ CONSUMER_START:
             //cv::resize(is_goal, is_goal_resized, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
             //cv::imshow("is_goal_resized" + std::to_string(m_sonar_app_index), is_goal_resized);
             //cv::waitKey(1); // 等待 1 毫秒以更新窗口
-
+            saveImageWithTimestamp_mubiao(is_goal);
             // 开运算
             cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2)); // 定义核
             cv::Mat result;
             cv::morphologyEx(is_goal, result, cv::MORPH_OPEN, kernel); // 开运算
             //cv::imshow("After Opening" + std::to_string(m_sonar_app_index), result);
             //cv::waitKey(1);
-
+            saveImageWithTimestamp_mubiao(result);
             //// 遍历图像，看还有没有白色的点，有则认为是目标
             int temp_have_goal = 0;
             //for (int i = 0; i < 101; i++)
@@ -1927,6 +1927,32 @@ void SonarApp::write_model_param(std::string file_path)
     }
     out.close();
     return;
+}
+void SonarApp::saveImageWithTimestamp_mubiao(const cv::Mat& image) {
+    // 获取当前时间
+    std::time_t now = std::time(nullptr);
+    std::tm* now_tm = std::localtime(&now);
+
+    // 格式化时间戳
+    std::ostringstream oss;
+    oss << "D:/mubiao/target_"
+        << (now_tm->tm_year + 1900) << "-"
+        << (now_tm->tm_mon + 1) << "-"
+        << now_tm->tm_mday << "_"
+        << now_tm->tm_hour << "-"
+        << now_tm->tm_min << "-"
+        << now_tm->tm_sec << ".png";
+
+    std::string filename = oss.str();
+
+    // 保存图像
+    bool result2 = cv::imwrite(filename, image);
+    if (result2) {
+        std::cout << "图像已保存到文件: " << filename << std::endl;
+    }
+    else {
+        std::cerr << "保存图像失败!" << std::endl;
+    }
 }
 
 // 函数：计算对数正态分布的概率密度值
