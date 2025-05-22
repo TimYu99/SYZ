@@ -47,7 +47,7 @@ std::mutex uartMutex;
 
 cv::Mat frame11Display;
 cv::Mat frame22Display;
-
+int jishucount = 0;
 ////180°扇形最边角角度定义
 const float START_ANGLE = 270; // 扇形开始边角
 const float END_ANGLE = 90;    // 扇形结束边角
@@ -70,7 +70,8 @@ extern SeriallPort serialPort; // 声明全局变量
 extern SeriallPort serialPort2; // 声明全局变量
 int bytesWritten12;
 int bytesWritten21;
-
+int bytesWritten111;
+int bytesWritten222;
 ////实验站
 //char writeBufferimage[] = "Image detection ready!\r\n";
 //char writeBufferjinggao[] = "$HXXB,WAR,1*CK\r\n";
@@ -92,7 +93,15 @@ int biaozhi = 0;
 
 // 当前创建的 sonar app 编号
 static int sonar_app_index = 3;
-
+// 定义在 device.cpp 中
+// 每一个声呐的工作状态；1：正常工作；2：断线重连中；
+extern std::map < std::string, int > sonar_status;
+// 声呐对应的端口名字:第一个是声呐id，第二个是端口名字
+extern std::map < std::string, std::string > sonar_port_name;
+// 每一个声呐的断线重连次数
+extern std::map < std::string, int > sonar_reconnect_count;
+// 是否有一个声呐正在工作
+extern bool sonar_working_flag;
 
 //void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height);
 
@@ -224,7 +233,8 @@ namespace msis_pkg
     };
 
     // 定义构造函数
-    RangeImageBeam::RangeImageBeam() : angle_du(0.0f), angle_stepSize(0.0f), minRange(0.0f), max_range(0.0f), data_count(0) {
+    RangeImageBeam::RangeImageBeam() : angle_du(0.0f), angle_stepSize(0.0f), minRange(0.0f), max_range(0.0f), data_count(0) 
+    {
         // 在这里进行其他的初始化操作
     }
 
@@ -260,19 +270,15 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
     reserved = 0;
     end1 = 0x0D;    // CR
     end2 = 0x0A;    // LF
-    std::cout << globalPn << std::endl;
 
-    if (globalPn == 2254 && globalSn == 25)
-     {
-        sonar_app_index = 1;
-    }
-    if (globalPn == 2255 && globalSn == 24)
-    {
-        sonar_app_index = 0;
-    }
-    std::cout << sonar_app_index << std::endl;
+    //if (globalPn == 2254 && globalSn == 25)
+    //{
+    //    sonar_app_index = 1;
+    //    /*globalPn = 0;
+    //    globalSn = 0;*/
+    // }
 
-    m_sonar_app_index = sonar_app_index;
+    
     //sonar_app_index++;
     is_goal = cv::Mat(101, 200, CV_8UC1, cv::Scalar(0));
     qiang_du_tu = cv::Mat(101, 200, CV_8UC1, cv::Scalar(0));
@@ -286,11 +292,51 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
                                                         "t -> Save sonar texture" NEW_LINE
                                                         "i -> Save sonar image" NEW_LINE
                                                         "c -> Check head is sync'ed" NEW_LINE);
+    std::cout << globalPn << std::endl;
+    std::cout << globalSn << std::endl;
+    
+
+    if (sonar_status["2254.0025"] == 1)//1第一处
+    {
+        sonar_app_index = 1;
+        globalPn = 0;
+        globalSn = 0;
+        std::cout << globalPn << std::endl;
+        std::cout << globalSn << std::endl;
+    }
+    if (sonar_status["2255.0024"] == 1)
+    {
+        sonar_app_index = 0;
+        globalPn = 0;
+        globalSn = 0;
+        std::cout << globalPn << std::endl;
+        std::cout << globalSn << std::endl;
+    }
+
+    std::cout << sonar_app_index << std::endl;
+
+    m_sonar_app_index = sonar_app_index;
+    std::cout << m_sonar_app_index << std::endl;
     //自动运行
     std::thread([this]() {
+        
         while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
-            this->doTask('r', dataFolder_); // 开始扫描
+            
+             
+            //std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
+     
+            jishucount++;
+                if (jishucount == 5)
+                {
+                    //std::cout << "creat";
+                    this->doTask('r', dataFolder_); // 开始扫描
+                    
+                }
+
+             
+
+            
+            //std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
             //std::this_thread::sleep_for(std::chrono::minutes(4)); // 等待4分钟
             //this->doTask('R', dataFolder_); // 停止扫描
             //std::this_thread::sleep_for(std::chrono::minutes(1)); // 等待4分钟
@@ -378,33 +424,40 @@ void SonarApp::doTask(int_t key, const std::string& path)
             break;
 
         case 'r':
-            sonar.startScanning();
+            //std::cerr << "555555" << std::endl;
+           
+            
             if (!isRecording)
             {
+                
                 isRecording = true;
-                // 在记录开始时生成时间戳
-                auto now = std::chrono::system_clock::now();
-                std::time_t timestamp = std::chrono::system_clock::to_time_t(now);
-                // 在开始记录时生成一个新的文件名
-                std::stringstream filenameStream;
-                filenameStream << dataFolder_ << "/ping_data_" << std::to_string(timestamp) << ".txt";
-                std::string filename = filenameStream.str();
-                // 打开文件并写入时间戳和序号信息
-                std::ofstream outputFile(filename);
-                if (outputFile.is_open()) {
-                    outputFile << "Recording Started:" << std::endl;
-                    outputFile << "Timestamp: " << std::ctime(&timestamp);
-                    outputFile << "Sequence Number: 1" << std::endl;
-                    outputFile.close();
-                    std::cout << "Recording started. Data will be written to " << filename << std::endl;
+                //// 在记录开始时生成时间戳
+                //auto now = std::chrono::system_clock::now();
+                //std::time_t timestamp = std::chrono::system_clock::to_time_t(now);
+                //// 在开始记录时生成一个新的文件名
+                //std::stringstream filenameStream;
+                //filenameStream << dataFolder_ << "/ping_data_" << std::to_string(timestamp) << ".txt";
+                //std::string filename = filenameStream.str();
+                //// 打开文件并写入时间戳和序号信息
+                //std::ofstream outputFile(filename);
+                //if (outputFile.is_open()) {
+                //    std::cerr << "5" << std::endl;
+                //    outputFile << "Recording Started:" << std::endl;
+                //    outputFile << "Timestamp: " << std::ctime(&timestamp);
+                //    outputFile << "Sequence Number: 1" << std::endl;
+                //    outputFile.close();
+                //    std::cout << "Recording started. Data will be written to " << filename << std::endl;
 
 
-                }
-                else
-                {
-                    std::cerr << "Unable to open the file for writing." << std::endl;
-                }
+                //}
+                //else
+                //{
+                //    std::cerr << "Unable to open the file for writing." << std::endl;
+                //}
+                //std::cerr << "55" << std::endl;
             }
+            sonar.startScanning();
+            //std::cerr << "5" << std::endl;
             break;
 
         case 'R':
@@ -530,6 +583,7 @@ void SonarApp::callbackMotorMoveComplete(Sonar& sonar, bool_t ok)
 void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
 {
     //Debug::log(Debug::Severity::Info, name.c_str(), "Ping data");
+    std::cerr << "数据回传" << std::endl;
     m_piss360 = &iss360;
     if (isRecording) {
         static int pingDataCount = 0; // 静态变量用于保持计数器的值
@@ -593,6 +647,7 @@ void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
 
 void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, uint_t txPulseLengthMm)
 {
+    std::cerr << "运行到recordPingData" << std::endl;
     //先判断是否采集shanxing数据
     Device::Info adevice;
     msis_pkg::RangeImageBeam temp_ping_;
@@ -680,7 +735,6 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     uint8_t hour = now_tm->tm_hour;
     uint8_t minute = now_tm->tm_min;
     uint8_t second = now_tm->tm_sec;
-
     uint8_t status = 0x00; // 示例状态
     // 设置状态位：Bit0, Bit1, Bit2, Bit3
     // 使用全局变量进行判断
@@ -758,23 +812,25 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     //globalx = 1;
     uint8_t minrange = temp_ping_.minRange;
     uint8_t maxrange = temp_ping_.max_range;
-
+    
 // #define USE_C_FILE_STREAM
 #ifndef USE_C_FILE_STREAM
     // 构造文件名
     char filename[256];
-    snprintf(filename, sizeof(filename), "%s/all_ping_data1.txt", dataFolder_.c_str());
+    snprintf(filename, sizeof(filename), "%s/all_ping_data.txt", dataFolder_.c_str());
 
+    
     // 打开文件（以追加模式）
     FILE* outputFile = fopen(allPingDataFilename_.c_str(), "a");
     if (outputFile != NULL) {
         // 写入数据到文件
-        fprintf(outputFile, "Processed Ping Data:\n");
+        fprintf(outputFile, "Processed %d Ping Data:\n", m_sonar_app_index);
 
         // 写入时间戳
         char timeBuffer[64];
         struct tm* localTime = localtime(&timestamp);
         strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localTime);
+
         fprintf(outputFile, "Timestamp: %s\n", timeBuffer);
 
         // 写入其他参数
@@ -841,48 +897,45 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
         std::cerr << "Unable to open the file for writing." << std::endl;
     }
 
-#endif
+#endif 
 
     
     // 发送格式化数据
-    std::string portName = "COM6"; // 根据需要调整
-    uint32_t baudrate = 115200; // 根据需要调整
-    sendFormattedData(portName, baudrate, year, month, day, hour, minute, second, status, angle, speed, minrange, maxrange);
+    
+
+    sendFormattedData(year, month, day, hour, minute, second, status, angle, speed, minrange, maxrange);
 
     static int send_count = 0;
     send_count++;
-    if (send_count % 30 == 0) {
+    if (send_count % 20 == 0) {
         std::cout << "Send data count: " << send_count << std::endl;
-        int temp = 0;
-
-        if (globalstatus1 == 0x03)
+        int temp ;
+        send_count = 0;
+        //std::cerr << "判断之前" << std::endl;
+        if (globalstatus1 == 0x03|| globalstatus1==0x07 || globalstatus2 == 0x07 || globalstatus2 == 0x03)
         {
-            if (sendBuffer[0] != '\0') {
-                serialPort.write(sendBuffer, 28, temp);//实验站时不注释，考古注释
-                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-            }
-
-            if (sendBuffer2[0] != '\0') {
-                //serialPort.write("\n", 1, temp);
-                serialPort.write(sendBuffer2, 28, temp);
-                //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
-            }
+            send_count = 0;
+             ;
         }
         else{
-
+            //std::cerr << "进入else" << std::endl;
             if (m_sonar_app_index == 0) 
             {
+               // std::cerr << "发送前1" << std::endl;
                 serialPort.write(sendBuffer, 28, temp);   // 实验站时不注释，考古注释
                // memset(sendBuffer, 0, sizeof(sendBuffer));
                 // saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
                 send_count = 0;
             }
             else {
-                serialPort.write(sendBuffer2, 28, temp);   // 实验站时不注释，考古注释
-               
+                //std::cerr << "发送前2" << std::endl;
+                serialPort.write(sendBuffer2, 28, bytesWritten222);   // 实验站时不注释，考古注释
+                //std::cerr << "发送后" << std::endl;
                 // saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1);
                 send_count = 0;
             }
+            // std::cerr << "22" << std::endl;
+            // std::cerr << "222222" << std::endl;
         }
     }
 
@@ -998,8 +1051,7 @@ void SonarApp::processReceivedData(const std::vector<uint8_t>& data)
 }
 void SonarApp::sendFormattedData
 (
-    const std::string& portName,
-    uint32_t baudrate,
+
     uint16_t year, uint8_t month, uint8_t day,
     uint8_t hour, uint8_t minute, uint8_t second,
     uint8_t status, uint16_t angle, uint8_t speed,
@@ -1137,13 +1189,14 @@ void SonarApp::saveShanxingToFile(const float* shanxing, int rows, int cols, con
 void SonarApp::consumePingData()
 {
 CONSUMER_START:
+    std::cerr << "消费者线程开始运行" << std::endl;
     std::unique_lock<std::mutex> lock(pingQueueMutex);
     consumerCondition.wait(lock, [this] { return !pingQueue.empty(); });
     std::cout << "Consumer thread comsume data!  Queue size = " << pingQueue.size() << std::endl; // 调试输出
     Sonar::Ping ping = pingQueue.front(); // 获取队列前端的元素
     pingQueue.pop(); // 移除队列前端的元素
     lock.unlock(); // 解锁互斥量
-
+    
 #ifdef USE_NEW_ALGORITHM
     int temp_qiangdutu_index = convert_angle2index(ping.angle);
     for (int i = 0; i < ping.data.size(); i++) {
@@ -1177,7 +1230,7 @@ CONSUMER_START:
             cv::waitKey(1); // 等待 1 毫秒以更新窗口
 
             // 开运算
-            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2)); // 定义核
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)); // 定义核
             cv::Mat result;
             cv::morphologyEx(is_goal, result, cv::MORPH_OPEN, kernel); // 开运算
             cv::imshow("After Opening" + std::to_string(m_sonar_app_index), result);
@@ -1200,7 +1253,24 @@ CONSUMER_START:
             std::vector<std::vector<cv::Point>> contours; // 存储轮廓
             std::vector<cv::Vec4i> hierarchy; // 存储轮廓的层次结构
             cv::findContours(result, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE); // 查找轮廓
-
+            // 遍历轮廓，计算外接矩形
+            for (size_t i = 0; i < contours.size(); i++)
+            {
+                cv::Rect boundingBox = cv::boundingRect(contours[i]); // 计算外接矩形
+                // cv::rectangle(is_goal, boundingBox, cv::Scalar(255), 2); // 绘制外接矩形
+                int centerX = boundingBox.x + boundingBox.width / 2; // 计算中心点的 x 坐标
+                int centerY = boundingBox.y + boundingBox.height / 2; // 计算中心点的 y 坐标，即距离单位
+                // 计算质心的角度
+                double temp_angle = (centerY < 50) ? ((centerY * 64 + 9600.00) / 35.5) : ((centerY - 50) * 64.0 / 35.5);
+                double temp_dis = 100.0 * centerX / 200.0; // 距离单位
+                std::string angele_str = std::to_string(temp_angle);
+                std::string dis_str = std::to_string(temp_dis);
+                std::string temp_buffer;
+                std::cout << "CenterX: " << centerX << " CenterY: " << centerY << " Angle: " << angele_str << " Distance: " << dis_str << std::endl;
+                temp_buffer = angele_str + "," + dis_str + "\n";
+                saveData("D:/ceshi/Seriallog.txt", temp_buffer.c_str(), strlen(temp_buffer.c_str()), "mubiaojuli", 0);
+                //saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send xiaoshi2", 0);
+            }
             if (contours.empty()) {
                 temp_have_goal = 0;
                 std::cout << "No contours found." << std::endl;
@@ -1208,6 +1278,8 @@ CONSUMER_START:
             else {
                 std::cout << "Contours found: " << contours.size() << std::endl;
                 temp_have_goal = 1;
+                saveImageWithTimestamp_mubiao(is_goal);
+                saveImageWithTimestamp_mubiao(result);
             }
 
             if (temp_have_goal == 1)
@@ -1218,9 +1290,9 @@ CONSUMER_START:
             else
             {
                 flag_have_goal = 0;
-                flag_zhiling = 1;
+                flag_zhiling = 1;//第一次发消息的标志
             }
-#if USE_SYZ == 1
+
             if (flag_have_goal == 1 && flag_zhiling == 1)
             {
 
@@ -1231,14 +1303,14 @@ CONSUMER_START:
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
                     serialPort2.write(writeBufferjinggao, 16, bytesWritten12);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
-                    
+
                 }
                 else
                 {
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
                     serialPort2.write(writeBufferjinggao2, 16, bytesWritten12);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao2, strlen(writeBufferjinggao), "COM2 Send jinagao1", 0);
-                    
+
                 }
                 flag_zhiling = 0;
             }
@@ -1260,19 +1332,6 @@ CONSUMER_START:
                 }
                 biaozhi = 0;
                 flag_zhiling = 1;
-              }
-#else
-
-#endif
-
-            // 遍历轮廓，计算外接矩形
-            for (size_t i = 0; i < contours.size(); i++) {
-                cv::Rect boundingBox = cv::boundingRect(contours[i]); // 计算外接矩形
-                // cv::rectangle(is_goal, boundingBox, cv::Scalar(255), 2); // 绘制外接矩形
-                int centerX = boundingBox.x + boundingBox.width / 2; // 计算中心点的 x 坐标
-                int centerY = boundingBox.y + boundingBox.height / 2; // 计算中心点的 y 坐标，即距离单位
-                // 计算质心的角度
-                int temp_angle = (centerX < 50) ? ((centerX * 64 + 9600.00) / 35.5) : ((centerX - 50) * 64.0 / 35.5);
             }
             cv::imshow("Contours", is_goal);
 
@@ -1296,21 +1355,22 @@ CONSUMER_START:
             cv::resize(zui_da_qiang_du_tu, zui_da_qiang_du_tu4x, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
             cv::imshow("zui_da_qiang_du_tu4x" + std::to_string(m_sonar_app_index), zui_da_qiang_du_tu4x);
             cv::waitKey(1); // 等待 1 毫秒以更新窗口
-#endif
-            cv::imshow("goal" + std::to_string(m_sonar_app_index), is_goal);
-            cv::waitKey(1); // 等待 1 毫秒以更新窗口
+#else
+            
+            //cv::imshow("goal" + std::to_string(m_sonar_app_index), is_goal);
+            //cv::waitKey(1); // 等待 1 毫秒以更新窗口
             //cv::Mat is_goal_resized;
             //cv::resize(is_goal, is_goal_resized, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST); // 放大4倍
             //cv::imshow("is_goal_resized" + std::to_string(m_sonar_app_index), is_goal_resized);
             //cv::waitKey(1); // 等待 1 毫秒以更新窗口
-            saveImageWithTimestamp_mubiao(is_goal);
+            std::cerr << "图像处理" << std::endl;
             // 开运算
-            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2)); // 定义核
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)); // 定义核
             cv::Mat result;
             cv::morphologyEx(is_goal, result, cv::MORPH_OPEN, kernel); // 开运算
             //cv::imshow("After Opening" + std::to_string(m_sonar_app_index), result);
             //cv::waitKey(1);
-            saveImageWithTimestamp_mubiao(result);
+            
             //// 遍历图像，看还有没有白色的点，有则认为是目标
             int temp_have_goal = 0;
             //for (int i = 0; i < 101; i++)
@@ -1329,6 +1389,25 @@ CONSUMER_START:
             std::vector<cv::Vec4i> hierarchy; // 存储轮廓的层次结构
             cv::findContours(result, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE); // 查找轮廓
 
+
+            // 遍历轮廓，计算外接矩形
+            for (size_t i = 0; i < contours.size(); i++)
+            {
+                cv::Rect boundingBox = cv::boundingRect(contours[i]); // 计算外接矩形
+                // cv::rectangle(is_goal, boundingBox, cv::Scalar(255), 2); // 绘制外接矩形
+                int centerX = boundingBox.x + boundingBox.width / 2; // 计算中心点的 x 坐标
+                int centerY = boundingBox.y + boundingBox.height / 2; // 计算中心点的 y 坐标，即距离单位
+                // 计算质心的角度
+                double temp_angle = (centerY < 50) ? ((centerY * 64 + 9600.00) / 35.5) : ((centerY - 50) * 64.0 / 35.5);
+                double temp_dis = 100.0 * centerX / 200.0; // 距离单位
+                std::string angele_str = std::to_string(temp_angle);
+                std::string dis_str = std::to_string(temp_dis);
+                std::string temp_buffer;
+                std::cout << "CenterX: " << centerX << " CenterY: " << centerY << " Angle: " << angele_str << " Distance: " << dis_str << std::endl;
+                temp_buffer = angele_str + "," + dis_str + "\n";
+                saveData("D:/ceshi/Seriallog.txt", temp_buffer.c_str(), strlen(temp_buffer.c_str()), "mubiaojuli", 0);
+                //saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi2, strlen(writeBufferxiaoshi2), "COM2 Send xiaoshi2", 0);
+            }
             if (contours.empty()) {
                 temp_have_goal = 0;
                 std::cout << "No contours found." << std::endl;
@@ -1336,6 +1415,8 @@ CONSUMER_START:
             else {
                 std::cout << "Contours found: " << contours.size() << std::endl;
                 temp_have_goal = 1;
+                saveImageWithTimestamp_mubiao(is_goal);
+                saveImageWithTimestamp_mubiao(result);
             }
 
             if (temp_have_goal == 1)
@@ -1346,7 +1427,7 @@ CONSUMER_START:
             else
             {
                 flag_have_goal = 0;
-                flag_zhiling = 1;
+                flag_zhiling = 1;//第一次发消息的标志
             }
 
             if (flag_have_goal == 1 && flag_zhiling == 1)
@@ -1389,7 +1470,7 @@ CONSUMER_START:
                 biaozhi = 0;
                 flag_zhiling = 1;
             }
-
+#endif
 
         }
         circle_times++;
@@ -1487,7 +1568,7 @@ CONSUMER_START:
 #if USE_DYNAMIC_THRESHOLD == 1
                 double max_value = std::exp(model_array[temp_index][i].mu + (5.5 + (-2 / 190.0) * i)* temp_sigma);
 #else
-                double max_value = std::exp(model_array[temp_index][i].mu + 2.5 * temp_sigma);//这里更改阈值
+                double max_value = std::exp(model_array[temp_index][i].mu + 2* temp_sigma);//这里更改sigma阈值 x* temp_sigma
 #endif
                 max_value < 0 ? max_value = 0 : 65536;
                 max_value > 65535 ? max_value = 65535 : max_value;

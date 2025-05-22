@@ -852,13 +852,20 @@ bool_t Sonar::newPacket(uint8_t command, const uint8_t* data, uint_t size)
 	}
 	case Commands::AcquireHeadIdx:
 	{
+		break;
 		HeadIndexes headIndexes;
 		headIndexes.state = static_cast<HeadIndexes::State>(*data++);
 		headIndexes.slippage = static_cast<int16_t>(Mem::get16Bit(&data));
 		headIndexes.stdDeviation = Mem::getFloat32(&data);
 		headIndexes.hysteresisCorrection = static_cast<int_t>(static_cast<int16_t>(Mem::get16Bit(&data)));
 		headIndexes.widthCorrection = static_cast<int_t>(static_cast<int16_t>(Mem::get16Bit(&data)));
+		
 		uint_t count = (size - 11) / 2;
+		if (count > headIndexes.indexes.max_size()) {
+			throw std::length_error("Count exceeds vector max size.");
+			//std::cout << "Size: " << size << ", Count: " << count << std::endl;
+		}
+		
 		headIndexes.indexes.resize(count);
 		for (uint_t i = 0; i < count; i++)
 		{

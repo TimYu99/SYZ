@@ -89,8 +89,7 @@ namespace IslSdk
 
         void SonarApp::sendFormattedData
         (
-            const std::string& portName,
-            uint32_t baudrate,
+
             uint16_t year, uint8_t month, uint8_t day,
             uint8_t hour, uint8_t minute, uint8_t second,
             uint8_t status, uint16_t angle, uint8_t speed,

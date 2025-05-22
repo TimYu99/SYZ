@@ -139,17 +139,7 @@ void App::callbackDisconnect(Device& device)
     sonar_working_flag = temp_flag;
     printf("是否有设备在工作：%d\n", sonar_working_flag);
    
-    if (sonar_status["2255.0024"] == 0&& sonar_status["2254.0025"] == 0)
-    {
-        globalstatus1 = 0x00; // 设成默认值
-        
-    }
-  
-    if (sonar_status["2254.0025"] == 0)
-    {
-         // 设成默认值
-        globalstatus2 = 0x00;
-    }
+   
     
     Debug::log(Debug::Severity::Notice, name.c_str(), "%04u.%04u disconnected", device.info.pn, device.info.sn);
 }

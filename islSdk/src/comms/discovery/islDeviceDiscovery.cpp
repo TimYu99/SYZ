@@ -90,26 +90,28 @@ bool_t IslDeviceDiscovery::run()
                                 sonar_reconnect_count[it.first]++;
                                 printf("%s 设备增加超时轮询次数：%d\n", it.first.c_str(), sonar_reconnect_count[it.first]);
 
-                                // 声呐1断线之后多少次了，通知单片机
+                                // 声呐断线之后多少次了，通知单片机
                                 if (sonar_reconnect_count[it.first] == 10000) 
                                 {
                                     // 声呐1断线之后多少次了，通知单片机
-                                    if (it.first == "2255.0024") {
+                                    if (it.first =="2255.0024" ) //记得改回来//3、第三处
+                                    {
                                         std::string temp_send_string;
-                                        temp_send_string = "$SMSN,OFF,0*";
+                                        temp_send_string = "$SMSN,OFF,0*";//关闭交替工作
                                         temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                                         sendToNextLevel("COM10", temp_send_string);
-                                        temp_send_string = "$SMSN,ONTWO,2*";
+                                        temp_send_string = "$SMSN,ONTWO,2*";//开启声纳2
                                         temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                                         sendToNextLevel("COM10", temp_send_string);
                                     }
                                     // 声呐2断线之后多少次了，通知单片机
-                                    if (it.first == "2254.0025") {
+                                    if (it.first == "2254.0025")
+                                    {
                                         std::string temp_send_string;
                                         temp_send_string = "$SMSN,OFF,0*";
                                         temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                                         sendToNextLevel("COM10", temp_send_string);
-                                        temp_send_string = "$SMSN,ONONE,1*";
+                                        temp_send_string = "$SMSN,ONONE,1*";//开启声纳2
                                         temp_send_string += IslSdk::SeriallPort::calculateChecksum(temp_send_string) + "\r\n";
                                         sendToNextLevel("COM10", temp_send_string);
                                     }

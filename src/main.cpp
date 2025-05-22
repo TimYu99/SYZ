@@ -130,44 +130,29 @@ int main(int argc, char** argv)
     {
         //Platform::sleepMs(40);
         //这里主要是计时输出串口大包信息
-        //if (counts_jishu >= 10) {
-        //    counts_jishu = 0;
-        //    if (globalstatus1 == 0x03)
-        //    {
-        //        if (sendBuffer[0] != '\0') {
-        //            serialPort.write(sendBuffer, 28, bytesWritten1);//实验站时不注释，考古注释
-        //            //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-        //        }
-        //        if (sendBuffer2[0] != '\0') {
-        //            serialPort.write("\n", 1, bytesWritten1);
-        //            serialPort.write(sendBuffer2, 28, bytesWritten1);
-        //            //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
-        //        }
-        //    }
-        //    else
-        //    {
-        //        if (globalPn == 2255 && globalSn == 24)
-        //        {
-        //            if (sendBuffer[0] != '\0') {
-        //                serialPort.write(sendBuffer, 28, bytesWritten1);//实验站时不注释，考古注释
-        //                //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
-        //            }
-        //        }
-        //        if (globalPn == 2254 && globalSn == 25)
-        //        {
-        //            if (sendBuffer2[0] != '\0') {
-        //                serialPort.write(sendBuffer2, 28, bytesWritten1);
-        //                //saveData("D:/ceshi/output.txt", sendBuffer2, 28, "COM1 Send Hex Data", 1); // 这里应该是COM几？
-        //            }
-        //        }
+       
+            
+            //if (counts_jishu >= 10000)
+            //{
+            //    counts_jishu = 0;
+            //   
+            //    if (sendBuffer2[0] != '\0')
 
-        //    
-        //    }
+            //    {
+            //       
+            //        std::cerr << "判断0之前" << std::endl;
+            //        serialPort.write(sendBuffer2, 28, bytesWritten2);//实验站时不注释，考古注释
+            //        //saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
+            //    }
+            // }
+            //else 
+            //{
+            //    counts_jishu++;
+            //}
+          
         //   
-        //}
-        //else {
-        //    counts_jishu++;
-        //}
+        
+
         //if (counts_gengxin >= 10) {
         //    counts_gengxin = 0;
         //    //sdk.ports.onNew.connect(slotNewPort);
@@ -336,24 +321,26 @@ void newDevice(const Device::SharedPtr& device, const SysPort::SharedPtr& sysPor
         sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)] = 1;
         sonar_working_flag = 1;
         printf("%s 设备的状态：%d\n", StringUtils::pnSnToStr(device->info.pn, device->info.sn).c_str(), sonar_status[StringUtils::pnSnToStr(device->info.pn, device->info.sn)]);
-
-        if (sonar_status["2255.0024"] == 1 && sonar_status["2254.0025"] == 1)
+        if (sonar_status.find("2255.0024") != sonar_status.end() || sonar_status.find("2254.0025") != sonar_status.end()) //2、第二处
         {
-            globalstatus1 = 0x03;
-            globalstatus2 = 0x03;// 设成默认值
-        }
-        else 
-        {
-            if (sonar_status["2254.0025"] == 1)
-            {
-                globalstatus2 = 0x02; // 设成默认值
-                saveData("D:/ceshi/Seriallog.txt", sonar2, strlen(sonar2), "Work:", 0);
-            }
-            if (sonar_status["2255.0024"] == 1)
-            {
-                globalstatus1 = 0x01; // 设成默认值
-                saveData("D:/ceshi/Seriallog.txt", sonar1, strlen(sonar1), "Work:", 0);
-            }
+                           if (sonar_status["2255.0024"] == 1 && sonar_status["2254.0025"] == 1)
+                          {
+                              globalstatus1 = 0x03;
+                              globalstatus2 = 0x03;// 设成默认值
+                          }
+                         else 
+                         {
+                             if (sonar_status["2254.0025"] == 1)
+                             {
+                                 globalstatus2 = 0x02; // 设成默认值
+                                 saveData("D:/ceshi/Seriallog.txt", sonar2, strlen(sonar2), "Work:", 0);
+                             }
+                             if (sonar_status["2255.0024"] == 1)//(sonar_status["2255.0024"] == 1)
+                             {
+                                 globalstatus1 = 0x01; // 设成默认值
+                                 saveData("D:/ceshi/Seriallog.txt", sonar1, strlen(sonar1), "Work:", 0);
+                             }
+                         }
         }
         printf("是否有设备在工作：%d\n", sonar_working_flag);
         // 断线重连次数清零
