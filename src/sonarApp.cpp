@@ -91,6 +91,8 @@ int sec_mubao = 0;
 int chazhi_mubiao = 0;
 int biaozhi = 0;
 
+int debug_record_have_goal_count = 0;
+
 // 当前创建的 sonar app 编号
 static int sonar_app_index = 3;
 // 定义在 device.cpp 中
@@ -336,12 +338,12 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
             //std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
      
             jishucount++;
-                if (jishucount == 5)
-                {
-                    //std::cout << "creat";
-                    this->doTask('r', dataFolder_); // 开始扫描
-                    
-                }
+            if (jishucount == 5)
+            {
+                //std::cout << "creat";
+                this->doTask('r', dataFolder_); // 开始扫描
+                
+            }
 
              
 
@@ -778,6 +780,12 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     //    status |= 0x01; // 设置 Bit0 为 1
     //}
     // 计算 angle 和 speed
+    debug_record_have_goal_count++;
+
+    if (debug_record_have_goal_count % 80 == 0) {
+        globalstatus1 ^= (1 << 3); // 切换 Bit3
+    }
+
     if (biaozhi == 1)
     {
         if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
@@ -933,7 +941,7 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
 
     static int send_count = 0;
     send_count++;
-    if (send_count % 20 == 0) {
+    if (send_count % 50 == 0) {
         std::cout << "Send data count: " << send_count << std::endl;
         int temp ;
         send_count = 0;
