@@ -103,6 +103,8 @@ extern std::map < std::string, int > sonar_reconnect_count;
 // 是否有一个声呐正在工作
 extern bool sonar_working_flag;
 
+extern std::atomic<bool> flag_need_send_string; // 是否需要发送串口数据
+
 //void convert_uint_32_array_to_opencv_mat(const uint32_t* image, uint_t width, uint_t height);
 
 std::string IslSdk::messageToString(const Message& msg)
@@ -260,6 +262,7 @@ std::string SeriallPort::calculateChecksum(const std::string& message)
 //--------------------------------------------------------------------------------------------------
 SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), sequenceNumber_(1)
 {
+    // flag_need_send_string = false;
     setDataFolder("D:\\ceshi");
     header = "$SMSNXX";
     length = 28;  // 计算消息长度，排除结束符
@@ -312,6 +315,13 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
         std::cout << globalPn << std::endl;
         std::cout << globalSn << std::endl;
     }
+    if (sonar_status["2255.0010"] == 1) {
+        sonar_app_index = 3;
+        globalPn = 0;
+        globalSn = 0;
+        std::cout << globalPn << std::endl;
+        std::cout << globalSn << std::endl;
+    }
 
     std::cout << sonar_app_index << std::endl;
 
@@ -346,6 +356,8 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
     std::cout << "creat sonar app!";
     std::thread consumerThread(&SonarApp::consumePingData, this);
     consumerThread.detach();
+    // std::thread serial_sender_thread(&SonarApp::serial_sender, this);
+    // serial_sender_thread.detach();
 }
 //--------------------------------------------------------------------------------------------------
 SonarApp::~SonarApp(void)
@@ -579,6 +591,20 @@ void SonarApp::callbackMotorMoveComplete(Sonar& sonar, bool_t ok)
     Debug::log(Debug::Severity::Info, name.c_str(), "Motor move %s", ok ? "complete" : "busy");
 }
 //----------------------------------------------------------------------------------------------
+void SonarApp::serial_sender()
+{
+    while (true) {
+        if (flag_need_send_string == true) {
+            std::cout << "serial_sender thread is On!! " << std::endl; // 调试输出
+            int temp_buffer_written = 0;
+            flag_need_send_string = false; // 或 needSendString = true;
+            serialPort.write(sendBuffer, 28, temp_buffer_written);
+            std::cout << "serial_sender thread send data success!, Written Size =  " << temp_buffer_written << std::endl; // 调试输出    
+        }
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); // 如果没有数据需要发送，等待一段时间
+    }
+}
 //--------------------------------------------------------------------------------------------------
 void SonarApp::callbackPingData(Sonar& iss360, const Sonar::Ping& ping)
 {
@@ -754,7 +780,7 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     // 计算 angle 和 speed
     if (biaozhi == 1)
     {
-        if (m_sonar_app_index == 0)
+        if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
         {
             status = 0x04; //有目标
             status |= globalstatus1;//创两个
@@ -767,7 +793,7 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     }
     else
     {
-        if (m_sonar_app_index == 0)
+        if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
         {
             status |= globalstatus1;//无目标
         }
@@ -919,10 +945,11 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
         }
         else{
             //std::cerr << "进入else" << std::endl;
-            if (m_sonar_app_index == 0) 
+            if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
             {
-               // std::cerr << "发送前1" << std::endl;
-                serialPort.write(sendBuffer, 28, temp);   // 实验站时不注释，考古注释
+                // std::cerr << "发送前1" << std::endl;
+                flag_need_send_string = true; // 或 needSendString = true;
+                // serialPort.write(sendBuffer, 28, temp);   // 实验站时不注释，考古注释
                // memset(sendBuffer, 0, sizeof(sendBuffer));
                 // saveData("D:/ceshi/output.txt", sendBuffer, 28, "COM1 Send Hex Data", 1);
                 send_count = 0;
@@ -1080,7 +1107,7 @@ void SonarApp::sendFormattedData
     msg.end2 = 0x0A;
     std::string messageStr = messageToString(msg);
 
-    if (m_sonar_app_index == 0)
+    if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
         memcpy(sendBuffer, messageStr.c_str(), 28);
     else
         memcpy(sendBuffer2, messageStr.c_str(), 28);
@@ -1297,7 +1324,7 @@ CONSUMER_START:
             {
 
 
-                if (m_sonar_app_index == 0)
+                if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
                 {
                     //serialPort.write(writeBufferjinggao, 16, bytesWritten21);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
@@ -1316,7 +1343,7 @@ CONSUMER_START:
             }
             if (flag_have_goal == 0 && flag_zhiling == 0)
             {
-                if (m_sonar_app_index == 0)
+                if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
                 {
                     //serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM1 Send xiaoshi1", 0);
@@ -1434,7 +1461,7 @@ CONSUMER_START:
             {
 
 
-                if (m_sonar_app_index == 0)
+                if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
                 {
                     //serialPort.write(writeBufferjinggao, 16, bytesWritten21);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferjinggao, strlen(writeBufferjinggao), "COM1 Send jinagao1", 0);
@@ -1453,7 +1480,7 @@ CONSUMER_START:
             }
             if (flag_have_goal == 0 && flag_zhiling == 0)
             {
-                if (m_sonar_app_index == 0)
+                if (m_sonar_app_index == 0 || m_sonar_app_index == 3)
                 {
                     //serialPort.write(writeBufferxiaoshi, 16, bytesWritten21);
                     saveData("D:/ceshi/Seriallog.txt", writeBufferxiaoshi, strlen(writeBufferxiaoshi), "COM1 Send xiaoshi1", 0);

@@ -136,6 +136,7 @@
                 "graphicscontext": "cpp",
                 "viewport": "cpp",
                 "depthoffset": "cpp",
-                "modelsource": "cpp"
+                "modelsource": "cpp",
+                "readerwriter": "cpp"
         }
 }

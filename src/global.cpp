@@ -1,6 +1,7 @@
 // global.cpp
 
 #include "global.h"
+#include <atomic>
 
 // 全局变量定义
 uint16_t globalPn = 0;
@@ -25,6 +26,7 @@ int Accumulate;
 int thereold;
 char sendBuffer[256] = "\0";
 char sendBuffer2[256] = "\0";
+std::atomic<bool> flag_need_send_string;
 // 全局变量定义目标判别时的标志和初始化
 int flag_jingzhi = 0;   // 默认关闭
 int flag_yundong = 1;   // 默认关闭

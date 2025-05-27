@@ -13,6 +13,7 @@
 #include <mutex>
 #include <windows.h> // 添加 Windows API 头文件
 #include <opencv2/opencv.hpp>
+#include <atomic>
 
 
 //--------------------------------------- Class Definition -----------------------------------------
@@ -124,13 +125,16 @@ namespace IslSdk
         void updatePingDataFilename();
         void writeInitialLog();
         void SonarApp::recordPingData(const Sonar& iss360, const Sonar::Ping& ping, uint_t txPulseLengthMm);
+        void serial_sender();
         void saveImageWithTimestamp_beijing(const cv::Mat& image);
         void saveImageWithTimestamp_mubiao(const cv::Mat& image);
         
         #define MAX_QUEUE_SIZE 1000
         std::queue <Sonar::Ping> pingQueue;
+        // std::atomic<bool> flag_need_send_string;
         std::mutex pingQueueMutex;
         std::condition_variable consumerCondition;
+        std::condition_variable serial_sender_condition;
         Sonar* m_piss360;
         void consumePingData();
 

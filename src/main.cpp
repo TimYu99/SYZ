@@ -32,6 +32,8 @@ extern std::map < std::string, int > sonar_reconnect_count;
 // 是否有一个声呐正在工作
 extern bool sonar_working_flag;
 
+extern std::atomic<bool> flag_need_send_string;
+
 using namespace IslSdk;
 
 //------------------------------------------- Globals ----------------------------------------------
@@ -94,6 +96,7 @@ void COM2_reader();
 //--------------------------------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
+    flag_need_send_string = false; // 初始化标志位，表示不需要发送串口数据
     Platform::setTerminalMode();
     const std::string appPath = Platform::getExePath(argv[0]);
     Sdk sdk;                                                                    // Create the SDK instance
@@ -115,6 +118,10 @@ int main(int argc, char** argv)
     char sendBuffer1[] = "No Sonar Message\r\n";
     char sendBuffer2024[] = "System Ready\r\n";
     serialPort.write(sendBuffer2024, 14, bytesWritten1);//开机成功提示
+    char sendBuffertingzhi [] = "$SMSN,OFF,0*CK\r\n";
+    serialPort2.write(sendBuffertingzhi, 16, bytesWritten1);//关闭交替工作
+    char sendBuffersonar1 [] = "$SMSN,ONONE,1*CK\r\n";
+    serialPort2.write(sendBuffersonar1, 18, bytesWritten1);//开启声呐1
     saveData("D:/ceshi/Seriallog.txt", sendBuffer2024, strlen(sendBuffer2024), "COM1 Send", 0);
     int counts_jishu = 0;
     int counts_gengxin = 0;
@@ -202,6 +209,14 @@ void COM1_reader()
             processSYZCommand(readBuffer1);
 
             // serialPort.write(readBuffer1, bytesRead1, bytesWritten1);
+        }
+
+        if (flag_need_send_string == true) {
+            std::cout << "serial_sender thread is On!! " << std::endl; // 调试输出
+            int temp_buffer_written = 0;
+            flag_need_send_string = false; // 或 needSendString = true;
+            serialPort.write(sendBuffer, 28, temp_buffer_written);
+            std::cout << "serial_sender thread send data success!, Written Size =  " << temp_buffer_written << std::endl; // 调试输出    
         }
 
         // auto end_main = std::chrono::high_resolution_clock::now();
