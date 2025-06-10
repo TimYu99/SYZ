@@ -334,9 +334,8 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
         
         while (true) {
             
-             
             //std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
-     
+
             jishucount++;
             if (jishucount == 5)
             {
@@ -345,7 +344,6 @@ SonarApp::SonarApp(void) : App("SonarApp"), m_pingCount(0), m_scanning(false), s
                 
             }
 
-             
 
             
             //std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待1秒，确保设备已初始化
@@ -780,11 +778,11 @@ void SonarApp::recordPingData(const Sonar & iss360, const Sonar::Ping & ping, ui
     //    status |= 0x01; // 设置 Bit0 为 1
     //}
     // 计算 angle 和 speed
-    debug_record_have_goal_count++;
+    // debug_record_have_goal_count++;
 
-    if (debug_record_have_goal_count % 80 == 0) {
-        globalstatus1 ^= (1 << 3); // 切换 Bit3
-    }
+    // if (debug_record_have_goal_count % 80 == 0) {
+    //     globalstatus1 ^= (1 << 3); // 切换 Bit3
+    // }
 
     if (biaozhi == 1)
     {

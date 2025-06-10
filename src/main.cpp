@@ -118,10 +118,13 @@ int main(int argc, char** argv)
     char sendBuffer1[] = "No Sonar Message\r\n";
     char sendBuffer2024[] = "System Ready\r\n";
     serialPort.write(sendBuffer2024, 14, bytesWritten1);//开机成功提示
+
     char sendBuffertingzhi [] = "$SMSN,OFF,0*CK\r\n";
     serialPort2.write(sendBuffertingzhi, 16, bytesWritten1);//关闭交替工作
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // 等待1秒钟，确保串口打开成功
     char sendBuffersonar1 [] = "$SMSN,ONONE,1*CK\r\n";
     serialPort2.write(sendBuffersonar1, 18, bytesWritten1);//开启声呐1
+
     saveData("D:/ceshi/Seriallog.txt", sendBuffer2024, strlen(sendBuffer2024), "COM1 Send", 0);
     int counts_jishu = 0;
     int counts_gengxin = 0;
@@ -681,15 +684,19 @@ void processDSPCommand(const std::string& command)
 
 void sendReply(const std::string& portName, const std::string& message)
 {
+    printf("Received DSP message, send to ShiYanZhan:\n");
     //std::lock_guard<std::mutex> lock(uartOperationMutex);
     uint32_t baudrate = 115200;  // 根据需要调整波特率
     const char* buffer = message.c_str();
     serialPort.write(buffer, strlen(buffer), bytesWritten1);
     saveData("D:/ceshi/Seriallog.txt", buffer, strlen(buffer), "COM1 Tran", 0);
     //uartPort6_.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.size(),115200);
+    printf("Function sendReply exit\n");
 }
 
-void sendToNextLevel(const std::string& portName, const std::string& message) {
+void sendToNextLevel(const std::string& portName, const std::string& message)
+{
+    printf("Received ShiYanZhan message, send to DSP:\n");
     uint32_t baudrate = 115200;  // 根据需要调整波特率
     const char* buffer = message.c_str();
     serialPort2.write(buffer, strlen(buffer), bytesWritten2);
@@ -697,4 +704,5 @@ void sendToNextLevel(const std::string& portName, const std::string& message) {
     // 处理完后暂停1秒
     std::this_thread::sleep_for(std::chrono::seconds(1));
     //uartPort10_.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.size(), ConnectionMeta(115200));
+    printf("Function sendToNextLevel exit\n");
 }
